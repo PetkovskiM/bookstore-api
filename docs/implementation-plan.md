@@ -1,8 +1,8 @@
 # Implementation plan
 
 Plan for **10 working branches in total**, excluding `main`: setup is already
-merged, contracts/validation is the current branch, and eight branches follow.
-The names below are suggestions except for the first two, which already exist.
+merged, contracts/validation is merged, and persistence is the current branch.
+The names below are suggestions except for the first three, which already exist.
 The developer creates each branch from updated `main` after merging the previous
 PR and handles all staging, commits, pushes, and merges.
 
@@ -13,8 +13,8 @@ contract; it does not turn those choices into extra assignment requirements.
 | Order | Branch | Scope and completion check |
 | --- | --- | --- |
 | 1 | `chore/project-setup` | Merged: one solution, three projects, stable SDK selection, formatting/ignore rules, and setup instructions; restore/build verified. |
-| 2 | `feat/book-contracts-validation_` | Current: Book/Author models, request/response DTOs, trimming and validation, pagination defaults, JSON contracts, and meaningful unit tests. |
-| 3 | `feat/book-persistence` | Bookstore DbContext and SQL Server EF Core migrations; one SQL Server Developer container with a health check and persistent named volume, local secrets/placeholders, and idempotent Development-only book/author data. Verify migrations and data survive a container restart. Applications still run in Visual Studio. |
+| 2 | `feat/book-contracts-validation_` | Merged: Book/Author models, request/response DTOs, trimming and validation, pagination defaults, JSON contracts, and meaningful unit tests. |
+| 3 | `feat/book-persistence` | Current: Bookstore DbContext and SQL Server EF Core migrations; one SQL Server Developer container with a health check and persistent named volume, local secrets/placeholders, and idempotent Development-only book/author data. Verify migrations and data survive a container restart. Applications still run in Visual Studio. |
 | 4 | `feat/book-crud` | Small async book service and CRUD controllers with cancellation tokens, generated IDs, existing-author rules, replacement behavior, and correct responses. Add built-in ProblemDetails, exception handling, and safe logging. Verify against SQL Server and unit-test application rules. |
 | 5 | `feat/book-search` | Title/author substring search with case-insensitive AND filters, stable ordering, counts, pagination, and empty results. Verify SQL Server case handling and pagination boundaries; add focused rule tests. |
 | 6 | `feat/oauth-server` | Local OpenIddict server and minimal Identity login/logout, separate authentication database in the existing SQL Server container, migrations, and idempotent Development-only demo user/clients. Restrict grants/scopes; verify real client-credentials and implicit token issuance, HTTPS, discovery, and callbacks. |

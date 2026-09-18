@@ -1,9 +1,10 @@
 # Bookstore API
 
-An ASP.NET Core bookstore API. The solution setup, Book/Author models, request
-and response contracts, input validation, and focused unit tests are implemented.
-Database access, authentication, book endpoints, a demonstration client, Docker,
-CI, and integration tests are planned in the [ordered branch plan](docs/implementation-plan.md).
+An ASP.NET Core bookstore API. The solution setup, Book/Author contracts and
+validation, unit tests, and EF Core SQL Server persistence are implemented.
+SQL Server runs in Docker; the applications still run locally or in Visual Studio.
+Book endpoints, authentication, a demonstration client, application containers,
+and CI are planned for later checkpoints.
 
 ## Solution
 
@@ -11,7 +12,7 @@ Open `Bookstore.slnx`, the solution containing all three .NET 10 projects:
 
 | Project | Purpose |
 | --- | --- |
-| `src/Bookstore.Api` | Web host with controller support, Book/Author models, and validated request/response contracts; future CRUD, search, and persistence. |
+| `src/Bookstore.Api` | Controller support, Book/Author contracts, EF Core DbContext, migrations, and development sample data; future CRUD and search. |
 | `src/Bookstore.Auth` | Empty web host; future local OAuth2 server using OpenIddict and minimal ASP.NET Core Identity. |
 | `tests/Bookstore.UnitTests` | xUnit tests for request validation, normalization, pagination boundaries, and JSON contracts. |
 
@@ -50,15 +51,17 @@ dotnet test tests/Bookstore.UnitTests/Bookstore.UnitTests.csproj --no-build --no
 ```
 
 The first command should report `10.0.400` or a newer stable `10.0.4xx` patch.
-Restore downloads the test packages from NuGet; no database is needed to build or
+Restore downloads EF Core and the test packages from NuGet; no database is needed to build or
 run these unit tests. The validation tests call MVC's object validator directly,
 including its validation of nested authors. JSON tests use the web serializer
 defaults. No HTTP server, database, or integration-test packages are involved.
 
-Verified for the contracts/validation step with SDK `10.0.400`: restore passed,
-build passed with zero warnings/errors, and all 53 unit-test cases passed.
+Verified for the persistence step with SDK `10.0.400`: package and tool restore
+passed, build passed with zero warnings/errors, and all 53 unit-test cases passed.
+Database checks are recorded below; the unit tests themselves use no database.
 
-To start an empty host, run one of these commands (use separate terminals for both):
+Complete the database setup below before starting the API. To start either host
+(use separate terminals for both):
 
 ```powershell
 dotnet run --project src/Bookstore.Api --launch-profile http
@@ -67,10 +70,176 @@ dotnet run --project src/Bookstore.Auth --launch-profile http
 
 The API uses `http://localhost:5100`; Auth uses `http://localhost:5200`.
 An HTTP 404 is expected for every path because neither host has endpoints yet.
+In Development, API startup applies migrations and initializes an empty catalog.
 In Visual Studio, set either web project as the startup project and select its
 `http` profile. For the optional `https` profiles, first trust the local development
 certificate with `dotnet dev-certs https --trust`; HTTPS uses ports 7100 and 7200
 respectively. Certificate trust and HTTPS startup have not been verified here.
+
+## SQL Server persistence
+
+### Local setup
+
+Use Docker Desktop with Linux containers. Compose runs SQL Server 2022 Developer
+on `127.0.0.1,14333` by default, bound only to the local machine. The API connects
+to the `Bookstore` database. A separate authentication database will be added to
+this same server in the authentication step.
+
+1. Copy the placeholder file once: `Copy-Item .env.example .env`. If `.env`
+   already exists, preserve it. Set `MSSQL_SA_PASSWORD` to a strong local password
+   (at least 8 characters, including upper/lowercase letters, digits, and a symbol).
+   Single-quote the value in `.env` if it contains `$` or `#`, so Compose treats
+   those characters literally. `.env` is ignored; only `.env.example` is tracked.
+2. Run `docker compose up -d --wait sqlserver`, then `docker compose ps`.
+   The health check makes a real SQL connection and executes `SELECT 1`.
+3. In Visual Studio, right-click **Bookstore.Api > Manage User Secrets** and add
+   the following entry, substituting the same local password. Preserve any other
+   secrets already in that file. If you change `MSSQL_PORT`, change the connection
+   string's port as well.
+
+```json
+{
+  "ConnectionStrings:Bookstore": "Server=tcp:127.0.0.1,14333;Database=Bookstore;User Id=sa;Password=<your-local-password>;Encrypt=True;TrustServerCertificate=True"
+}
+```
+
+User secrets live outside the repository. The tracked `appsettings.json` contains
+an empty `ConnectionStrings:Bookstore` placeholder. For a shell or deployment,
+`ConnectionStrings__Bookstore` is the equivalent environment variable; `.env` is
+read by Compose, not automatically by ASP.NET Core. The explicit IPv4 TCP address
+matches Compose's local binding; `localhost` timed out during local SQL client
+verification. `TrustServerCertificate=True`
+accepts the local container's self-signed SQL certificate for development.
+The `sa` login is only a local setup convenience; use separate deployment and
+restricted runtime logins in production. Sensitive EF logging is left disabled.
+Do not print secrets, full connection strings, or expanded Compose configuration.
+
+From the repository root:
+
+```powershell
+dotnet tool restore
+dotnet ef database update --project src/Bookstore.Api -- --environment Development
+dotnet run --project src/Bookstore.Api --launch-profile http
+```
+
+The local `dotnet-ef` tool and EF packages are pinned to `10.0.12`. The migration
+command creates `Bookstore` and applies `InitialCreate`; in Development it also
+initializes sample data. Starting the API with its Development launch profile
+performs the same migration/seeding automatically, so the explicit update command
+is optional. SQL Server must be healthy first. Build and unit tests need neither
+a connection string nor a running database. Missing database configuration gives
+a setup error when the DbContext is resolved; it never falls back to memory.
+
+### Model and relationship decisions
+
+`Data/BookstoreDbContext.cs` maps the existing models to `Authors` and `Books`.
+The PDF's required fields and limits become database constraints:
+
+| Column | SQL Server mapping |
+| --- | --- |
+| `Authors.AuthorId`, `Books.BookId` | `int IDENTITY(1,1)` primary keys, generated by SQL Server |
+| `Authors.Name`, `Books.Title` | Required `nvarchar(100)`, with minimum-length check constraints |
+| `Books.AuthorId` | Required `int` foreign key to `Authors.AuthorId`, with an index |
+| `Books.SubTitle` | Nullable `nvarchar(max)`, with no invented assignment length limit |
+
+`Author.Books` is the collection side of the one-to-many relationship; `Book.Author`
+and `Book.AuthorId` point to its required author. Several books can share one
+author. Deleting a referenced author is restricted, preventing accidental removal
+of its books. Deleting a book leaves its author intact. Names and titles are not
+unique: matching names must not silently merge people, and different books may
+share a title. Identity keys, deletion behavior, and the normalized relational
+schema are implementation choices, not extra PDF requirements. The database
+column spelling does not alter the existing JSON `subTitle` contract.
+
+Request setters already trim names/titles and validate their 3-100 character
+length. The database additionally rejects null/overlong values and values shorter
+than three characters after trimming ordinary SQL spaces. These checks protect
+storage; the request layer remains responsible for full .NET whitespace trimming
+and useful validation messages. No service or controller is added in this step.
+
+### Development sample data and repeat startup
+
+The seeder is registered **only when the environment is Development**. When both
+`Authors` and `Books` are empty, it adds three authors and five books in one save:
+Frank Herbert (*Dune*, *Dune Messiah*), Ursula K. Le Guin (*The Left Hand of
+Darkness*, *The Dispossessed*), and Jane Austen (*Pride and Prejudice*).
+All IDs come from SQL Server; one book has a subtitle and the others have null.
+
+If either table has a row, the entire seed is skipped. This deliberately bootstraps
+an empty catalog: it does not top up a partial catalog, match authors by name,
+recreate a deleted sample book, or reset edited values. EF's migration lock covers
+the empty check and save, preventing concurrent initializers from duplicating
+the sample set. Runtime startup uses async operations and cancellation tokens;
+the matching synchronous hook exists because EF's command-line tooling uses it.
+See [EF Core seeding](https://learn.microsoft.com/en-us/ef/core/modeling/data-seeding).
+The migration contains schema only, with no `HasData` or sample-row inserts.
+
+To inspect the data, connect in SSMS to `tcp:127.0.0.1,14333` with SQL authentication,
+the local `sa` password, and **Trust server certificate**, then select `Bookstore`:
+
+```sql
+SELECT COUNT(*) AS AuthorCount FROM dbo.Authors;
+SELECT COUNT(*) AS BookCount FROM dbo.Books;
+SELECT b.BookId, b.Title, b.SubTitle, a.AuthorId, a.Name
+FROM dbo.Books AS b
+JOIN dbo.Authors AS a ON a.AuthorId = b.AuthorId
+ORDER BY b.BookId;
+SELECT MigrationId FROM dbo.__EFMigrationsHistory;
+```
+
+For a fresh catalog, expect 3 authors, 5 books, and one migration. Stop and start
+the API again and rerun the queries: counts, IDs, and values should stay the same.
+Stop the API, run `docker compose restart sqlserver`, wait for
+`docker compose up -d --wait sqlserver`, and query again **before starting the API**
+to show that the rows survived storage restart rather than being recreated.
+Start the API again and confirm the same rows remain.
+
+`bookstore_sqlserver-data` is the named volume mounted at `/var/opt/mssql`.
+`docker compose stop sqlserver` and normal container restarts preserve it.
+Keep the volume; removing it deletes database files. Changing the password in
+`.env` does not change an existing database's `sa` password.
+
+### Controlled production provisioning
+
+Outside Development, startup neither migrates the schema nor registers demo
+seeding. Provision SQL Server and a database through a controlled deployment,
+back up existing data, and review an idempotent migration script:
+
+```powershell
+dotnet ef migrations script --idempotent --project src/Bookstore.Api --output .artifacts/bookstore-migrations.sql -- --environment Production
+```
+
+Ensure `.artifacts` exists first and supply `ConnectionStrings__Bookstore` through
+the deployment's secret configuration. Apply the reviewed SQL with a deployment
+identity allowed to change the schema; configure the runtime API with a different
+login limited to the required data operations. Use a trusted SQL Server certificate
+and `TrustServerCertificate=False`. This local Developer-edition Compose service
+is a demo setup, not production provisioning. Never run a production migration
+with the Development environment selected.
+
+### Persistence verification performed
+
+Checked locally on Windows against the Compose SQL Server container:
+
+- Applied the initial migration in Production and confirmed both tables remained
+  empty. Production API startup also left them empty.
+- Started the API in Development and found 3 authors and 5 books. A second startup
+  and a Development `dotnet ef database update` preserved all IDs and field values.
+- Edited a sample title, restarted the API, and confirmed the edit was preserved
+  without another copy being added. Restored that temporary verification edit.
+- Restarted SQL Server normally and compared every row **before** restarting the
+  API. All data survived. The next API startup using user secrets preserved it too.
+- Verified required fields, 3/100-character boundaries, rejected overlong values,
+  generated IDs, a shared author, foreign-key enforcement, restricted author
+  deletion, optional/long subtitles, and author preservation after book deletion.
+  These SQL constraint checks ran in transactions that were rolled back.
+- Confirmed no pending EF model changes and generated the production idempotent
+  SQL script. The production script was generated, not deployed to a production
+  environment.
+
+Visual Studio UI startup and HTTPS were not exercised. Full application containers,
+HTTP book operations, and OAuth remain later checkpoints. No integration-test
+project or database-test package was introduced.
 
 ## Contract
 
@@ -105,8 +274,8 @@ those versions, libraries, or project boundaries. xUnit tests, setup documentati
 and the later CI workflow are our agreed delivery practices.
 
 The following contract details are agreed assumptions beyond the PDF's model and
-flow requirements. Request shapes and local validation are implemented; database
-behavior, HTTP responses, and actual search results await later steps.
+flow requirements. Request shapes, local validation, and persistence are
+implemented; book-write behavior, HTTP responses, and search await later steps.
 
 - Book and Author IDs are database-generated integers. Book write DTOs omit
   `bookId`; responses include both IDs. Explicit `bookId` on creation is rejected;
@@ -128,15 +297,15 @@ behavior, HTTP responses, and actual search results await later steps.
   pagination, and return 200 with empty items for no matches or pages beyond the end.
 - No separate author API, registration UI, or unrelated features are planned.
 
-Later steps will document SQL Server/migrations, development data, local secrets,
-both real OAuth flows, Docker, and verification as they are implemented. Implicit
+Later steps will document both real OAuth flows, application containers, and
+their verification as they are implemented. Implicit
 flow is required for this assignment; it is a legacy flow, and Authorization Code
 with PKCE is a planned production recommendation rather than a replacement here.
 
 ### Current implementation
 
-`Models/Book.cs` and `Models/Author.cs` hold the data that will later be mapped by
-EF Core. They do not connect to a database. DTOs in `Contracts/` describe the JSON
+`Models/Book.cs` and `Models/Author.cs` are mapped by `Data/BookstoreDbContext.cs`
+to SQL Server. DTOs in `Contracts/` describe the JSON
 sent to and returned from the API, separately from the database models.
 
 `BookWriteRequest` contains the editable fields for a replacement.
@@ -171,7 +340,7 @@ Example creation payload (the endpoint is not implemented yet):
 }
 ```
 
-Expected response shape once creation and persistence are implemented; IDs here
+Expected response shape once creation is implemented; IDs here
 are illustrative database-generated values:
 
 ```json
