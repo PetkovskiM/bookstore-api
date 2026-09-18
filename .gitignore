@@ -427,3 +427,19 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Local .NET CLI and NuGet caches
+.dotnet/
+.nuget/
+
+# Local configuration and secrets (track only placeholder examples)
+.env
+.env.*
+!.env.example
+!.env.*.example
+!*.env.example
+appsettings.Local.json
+appsettings.*.Local.json
+*.p12
+*.pem
+*.key
