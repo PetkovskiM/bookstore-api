@@ -1,10 +1,10 @@
 # Bookstore API
 
 An ASP.NET Core bookstore API. The solution setup, Book/Author contracts and
-validation, unit tests, EF Core SQL Server persistence, book CRUD, and paginated search
-are implemented.
+validation, unit tests, EF Core SQL Server persistence, book CRUD, paginated search,
+and a local OAuth authorization server are implemented.
 SQL Server runs in Docker; the applications still run locally or in Visual Studio.
-Authentication, a demonstration client, application containers,
+API token validation/scope enforcement, Swagger, application containers,
 and CI are planned for later checkpoints.
 
 ## Solution
@@ -14,8 +14,8 @@ Open `Bookstore.slnx`, the solution containing all three .NET 10 projects:
 | Project | Purpose |
 | --- | --- |
 | `src/Bookstore.Api` | Book CRUD and search controller/service, contracts, ProblemDetails errors, EF Core DbContext, migrations, and development sample data. |
-| `src/Bookstore.Auth` | Empty web host; future local OAuth2 server using OpenIddict and minimal ASP.NET Core Identity. |
-| `tests/Bookstore.UnitTests` | xUnit tests for validation, pagination offsets, JSON contracts, author-reference rules, error responses, and safe exception logging. |
+| `src/Bookstore.Auth` | OpenIddict issuer, minimal Identity login/logout, separate authentication database, and a Development browser flow check. |
+| `tests/Bookstore.UnitTests` | xUnit tests for validation, pagination, JSON contracts, author rules, OAuth client/claim rules, error responses, and safe logging. |
 
 ## Prerequisites and Visual Studio
 
@@ -57,26 +57,30 @@ run these unit tests. The validation tests call MVC's object validator directly,
 including its validation of nested authors. JSON tests use the web serializer
 defaults. No HTTP server, database, or integration-test packages are involved.
 
-Verified for the search step with SDK `10.0.400`: package restore passed,
-build passed with zero warnings/errors, and all 71 unit-test cases passed.
+Verified for the OAuth server step with SDK `10.0.400`: package restore passed,
+build passed with zero warnings/errors, and all 97 unit-test cases passed. Live OAuth checks are
+recorded in the [OAuth server guide](docs/oauth-server.md#verification).
 Database checks are recorded below; the unit tests themselves use no database.
 
-Complete the database setup below before starting the API. To start either host
-(use separate terminals for both):
+Complete the database setup below before starting the API and the
+[Auth setup](docs/oauth-server.md#windows-and-visual-studio-setup) before starting
+Auth. Use separate terminals:
 
 ```powershell
 dotnet run --project src/Bookstore.Api --launch-profile http
-dotnet run --project src/Bookstore.Auth --launch-profile http
+dotnet run --project src/Bookstore.Auth --launch-profile https
 ```
 
-The API uses `http://localhost:5100`; Auth uses `http://localhost:5200`.
+The API uses `http://localhost:5100`; Auth uses `https://localhost:7200`.
 The API serves the CRUD and search routes below; its root path still returns 404.
-Auth remains a placeholder host with no endpoints.
+Auth serves discovery, token issuance, and login/logout; its Development browser
+check is at `https://localhost:7200/demo`.
 In Development, API startup applies migrations and initializes an empty catalog.
-In Visual Studio, set either web project as the startup project and select its
-`http` profile. For the optional `https` profiles, first trust the local development
-certificate with `dotnet dev-certs https --trust`; HTTPS uses ports 7100 and 7200
-respectively. Certificate trust and HTTPS startup have not been verified here.
+In Visual Studio, select the API's `http` profile or Auth's `https` profile.
+Trust the local development certificate with `dotnet dev-certs https --trust`.
+The API also has an optional `https` profile on port 7100. Auth HTTPS and
+certificate trust were verified with an HTTP client and Edge; API HTTPS and
+Visual Studio UI startup remain unverified.
 
 ## Book CRUD
 
@@ -163,13 +167,15 @@ ProblemDetails (400/404/405/409/415/500), and persistence across an API restart.
 The temporary database was removed; the existing `Bookstore` rows and migration
 history were compared before/after and remained unchanged. No integration-test
 project or additional test package was added. Search was verified in the following
-checkpoint; OAuth/401/403, HTTPS, and Visual Studio UI behavior remain unverified.
+checkpoint. API authentication/401/403, API HTTPS, and Visual Studio UI behavior
+remain unverified; authorization-server checks are documented below.
 
 ## Book search
 
 `GET /api/books/search` returns matching books and their authors. Like the CRUD
 routes at this checkpoint, search is currently unauthenticated. Its required
-OAuth implicit flow and `books.search` scope will be added in the authentication step.
+`books.search` scope enforcement will be added in the API security step. Auth
+already issues tokens through the required implicit flow.
 
 | Query parameter | Behavior |
 | --- | --- |
@@ -238,7 +244,33 @@ without duplicate seeding. An empty database returned an empty page in Productio
 EF reported no pending model changes. The temporary database was removed and the
 existing `Bookstore` rows and migration history were confirmed unchanged. These
 were manual SQL Server checks; no integration-test project or package was added.
-OAuth/401/403, HTTPS, and Visual Studio UI behavior remain unverified.
+API authentication/401/403, API HTTPS, and Visual Studio UI behavior remain
+unverified. The next section covers the authorization-server checks.
+
+## OAuth authorization server
+
+`Bookstore.Auth` now provides local OpenIddict token issuance and minimal Identity
+login/logout over HTTPS. It uses `BookstoreAuth`, a separate database in the same
+SQL Server container. The API still accepts requests without tokens: validation
+and endpoint scope enforcement belong to `feat/api-security-swagger` next.
+
+| Client | Flow | Permitted scope |
+| --- | --- | --- |
+| `bookstore-management` (confidential, with a secret) | Client credentials | `books.manage` |
+| `bookstore-browser` (public, without a secret) | Implicit | `books.search` |
+
+The two clients are applications, not two users. The single Development user is
+`demo@bookstore.local`; its password and the management secret are generated into
+Auth user secrets by `scripts/Initialize-AuthDevelopment.ps1`. Existing settings,
+passwords, and client registrations are preserved on repeated setup/startup.
+No credentials or demonstration rows are included in migrations or tracked
+configuration. Production does not migrate or seed automatically and requires
+explicit signing/encryption credentials.
+
+See the [OAuth server guide](docs/oauth-server.md) for setup, both flow examples,
+exact callback URLs, certificate and token decisions, production provisioning,
+and checks performed. The Development browser callback has been exercised in
+Edge. The reserved Swagger callback and API 401/403 behavior await the next branch.
 
 ## SQL Server persistence
 
@@ -246,8 +278,8 @@ OAuth/401/403, HTTPS, and Visual Studio UI behavior remain unverified.
 
 Use Docker Desktop with Linux containers. Compose runs SQL Server 2022 Developer
 on `127.0.0.1,14333` by default, bound only to the local machine. The API connects
-to the `Bookstore` database. A separate authentication database will be added to
-this same server in the authentication step.
+to the `Bookstore` database. Auth uses the separate `BookstoreAuth` database on
+the same server and persistent volume; see its setup guide above.
 
 1. Copy the placeholder file once: `Copy-Item .env.example .env`. If `.env`
    already exists, preserve it. Set `MSSQL_SA_PASSWORD` to a strong local password
@@ -401,8 +433,8 @@ Checked locally on Windows against the Compose SQL Server container:
   SQL script. The production script was generated, not deployed to a production
   environment.
 
-Visual Studio UI startup and HTTPS were not exercised. Full application containers
-and OAuth remain later checkpoints. No integration-test
+Visual Studio UI startup and API HTTPS were not exercised. Full application
+containers and API scope enforcement remain later checkpoints. No integration-test
 project or database-test package was introduced.
 
 ## Contract
@@ -461,10 +493,12 @@ implemented.
   pagination, and return 200 with empty items for no matches or pages beyond the end.
 - No separate author API, registration UI, or unrelated features are planned.
 
-Later steps will document both real OAuth flows, application containers, and
-their verification as they are implemented. Implicit
-flow is required for this assignment; it is a legacy flow, and Authorization Code
-with PKCE is a planned production recommendation rather than a replacement here.
+Both real OAuth flows and their verification are documented in the Auth guide.
+Token lifetime, audience, client IDs, implicit consent, and the development
+callback are our implementation choices, not extra assignment requirements.
+The required implicit flow is implemented explicitly; Authorization Code with
+PKCE is a production recommendation. API enforcement, Swagger, and application
+containers follow in later checkpoints.
 
 ### Current implementation
 
@@ -532,8 +566,9 @@ the response is:
 
 These examples will also be included in OpenAPI when the demonstration client is
 added. Unit tests cover input/author rules and exception response behavior; the
-SQL Server and live HTTP checks are separate manual verification. OAuth has not
-been implemented or verified yet.
+SQL Server, live HTTP, and browser checks are separate manual verification. OAuth
+issuance is implemented and verified; API token validation and scope enforcement
+are the next step.
 
 ## Local files
 
