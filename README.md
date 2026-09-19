@@ -2,10 +2,9 @@
 
 An ASP.NET Core bookstore API. The solution setup, Book/Author contracts and
 validation, unit tests, EF Core SQL Server persistence, book CRUD, paginated search,
-and a local OAuth authorization server are implemented.
+and a local OAuth authorization server with API scope enforcement and Swagger are implemented.
 SQL Server runs in Docker; the applications still run locally or in Visual Studio.
-API token validation/scope enforcement, Swagger, application containers,
-and CI are planned for later checkpoints.
+Application containers and CI are planned for later checkpoints.
 
 ## Solution
 
@@ -13,9 +12,9 @@ Open `Bookstore.slnx`, the solution containing all three .NET 10 projects:
 
 | Project | Purpose |
 | --- | --- |
-| `src/Bookstore.Api` | Book CRUD and search controller/service, contracts, ProblemDetails errors, EF Core DbContext, migrations, and development sample data. |
+| `src/Bookstore.Api` | Protected book CRUD/search, Swagger, contracts, ProblemDetails, EF Core migrations, and development sample data. |
 | `src/Bookstore.Auth` | OpenIddict issuer, minimal Identity login/logout, separate authentication database, and a Development browser flow check. |
-| `tests/Bookstore.UnitTests` | xUnit tests for validation, pagination, JSON contracts, author rules, OAuth client/claim rules, error responses, and safe logging. |
+| `tests/Bookstore.UnitTests` | xUnit tests for validation, pagination, JSON contracts, author rules, OAuth client/claim rules, API token/scope validation, errors, and safe logging. |
 
 ## Prerequisites and Visual Studio
 
@@ -57,9 +56,10 @@ run these unit tests. The validation tests call MVC's object validator directly,
 including its validation of nested authors. JSON tests use the web serializer
 defaults. No HTTP server, database, or integration-test packages are involved.
 
-Verified for the OAuth server step with SDK `10.0.400`: package restore passed,
-build passed with zero warnings/errors, and all 97 unit-test cases passed. Live OAuth checks are
-recorded in the [OAuth server guide](docs/oauth-server.md#verification).
+Verified for the API security step with SDK `10.0.400`: package restore passed,
+build passed with zero warnings/errors, and all 131 unit-test cases passed.
+See the [API security/Swagger guide](docs/api-security-swagger.md) and
+[OAuth server guide](docs/oauth-server.md#verification) for live checks.
 Database checks are recorded below; the unit tests themselves use no database.
 
 Complete the database setup below before starting the API and the
@@ -67,25 +67,26 @@ Complete the database setup below before starting the API and the
 Auth. Use separate terminals:
 
 ```powershell
-dotnet run --project src/Bookstore.Api --launch-profile http
 dotnet run --project src/Bookstore.Auth --launch-profile https
+dotnet run --project src/Bookstore.Api --launch-profile https
 ```
 
-The API uses `http://localhost:5100`; Auth uses `https://localhost:7200`.
-The API serves the CRUD and search routes below; its root path still returns 404.
+The API uses `https://localhost:7100`; Auth uses `https://localhost:7200`.
+Open `https://localhost:7100/swagger` for the Development demonstration UI.
+The API serves the protected CRUD and search routes below. Its fallback policy
+requires a token for other routes too; unknown routes return 404 after authentication.
 Auth serves discovery, token issuance, and login/logout; its Development browser
 check is at `https://localhost:7200/demo`.
 In Development, API startup applies migrations and initializes an empty catalog.
-In Visual Studio, select the API's `http` profile or Auth's `https` profile.
+In Visual Studio, configure both projects as startup projects with their `https` profiles.
 Trust the local development certificate with `dotnet dev-certs https --trust`.
-The API also has an optional `https` profile on port 7100. Auth HTTPS and
-certificate trust were verified with an HTTP client and Edge; API HTTPS and
-Visual Studio UI startup remain unverified.
+Both applications require HTTPS and reject plaintext HTTP instead of redirecting
+requests containing credentials. Visual Studio UI startup remains unverified.
 
 ## Book CRUD
 
-This is a local development checkpoint. The endpoints currently have no
-authentication; the required OAuth client-credentials protection is a later step.
+All four CRUD operations require a bearer token obtained through client credentials
+with `books.manage`. Missing/invalid tokens return 401; search tokens return 403.
 
 | Method and route | Success | Behavior |
 | --- | --- | --- |
@@ -114,20 +115,21 @@ into JSON or producing reference cycles. The schema is unchanged in this step.
 
 ### Try the endpoints from PowerShell
 
-Complete the [local database setup](#local-setup), start the API with the run
-command above, then run in another terminal:
+Complete the [local database setup](#local-setup), start Auth and the API, and obtain
+`$managementHeaders` using the [management-token example](docs/api-security-swagger.md#management-token-and-crud).
+Then run in the same PowerShell terminal:
 
 ```powershell
-$booksUrl = 'http://localhost:5100/api/books'
+$booksUrl = 'https://localhost:7100/api/books'
 $creation = @{
     title = '  Demo Book  '
     author = @{ name = 'Demo Author' }
     subTitle = 'First edition'
 } | ConvertTo-Json
 
-$created = Invoke-RestMethod -Method Post -Uri $booksUrl -ContentType 'application/json' -Body $creation
+$created = Invoke-RestMethod -Method Post -Uri $booksUrl -Headers $managementHeaders -ContentType 'application/json' -Body $creation
 $bookUrl = "$booksUrl/$($created.bookId)"
-Invoke-RestMethod -Uri $bookUrl
+Invoke-RestMethod -Uri $bookUrl -Headers $managementHeaders
 
 $replacement = @{
     title = 'Updated Demo Book'
@@ -135,8 +137,8 @@ $replacement = @{
 } | ConvertTo-Json
 
 # Omitting subTitle clears it. The book ID and author ID stay the same here.
-Invoke-RestMethod -Method Put -Uri $bookUrl -ContentType 'application/json' -Body $replacement
-Invoke-WebRequest -UseBasicParsing -Method Delete -Uri $bookUrl | Select-Object StatusCode
+Invoke-RestMethod -Method Put -Uri $bookUrl -Headers $managementHeaders -ContentType 'application/json' -Body $replacement
+Invoke-WebRequest -UseBasicParsing -Method Delete -Uri $bookUrl -Headers $managementHeaders | Select-Object StatusCode
 ```
 
 This walkthrough creates one author. Deleting the demo book intentionally leaves
@@ -149,7 +151,9 @@ Errors use `application/problem+json`, including a status, title, type, request
 path in `instance`, and a `traceId`. Validation failures also include an `errors`
 dictionary; an unknown author is reported under `Author.AuthorId`. Invalid JSON,
 missing required fields, and failed length checks return 400. Unsupported media
-types return 415; unsupported methods return 405. Unknown routes return 404.
+types return 415; unsupported methods return 405. Unknown routes return 404 after
+authentication. Rejections with 401/403 also use ProblemDetails; 401 includes a
+`WWW-Authenticate: Bearer` header without token-validation details.
 
 `AddProblemDetails()` and `IExceptionHandler` handle errors in both Development
 and Production. Unexpected exceptions return a generic 500; the handler logs
@@ -167,15 +171,13 @@ ProblemDetails (400/404/405/409/415/500), and persistence across an API restart.
 The temporary database was removed; the existing `Bookstore` rows and migration
 history were compared before/after and remained unchanged. No integration-test
 project or additional test package was added. Search was verified in the following
-checkpoint. API authentication/401/403, API HTTPS, and Visual Studio UI behavior
-remain unverified; authorization-server checks are documented below.
+checkpoint. Those historical checks predate authentication; current token and
+Swagger checks are in the [security guide](docs/api-security-swagger.md#verification).
 
 ## Book search
 
-`GET /api/books/search` returns matching books and their authors. Like the CRUD
-routes at this checkpoint, search is currently unauthenticated. Its required
-`books.search` scope enforcement will be added in the API security step. Auth
-already issues tokens through the required implicit flow.
+`GET /api/books/search` returns matching books and their authors. It requires
+`books.search` from the implicit flow. Management tokens return 403 on this route.
 
 | Query parameter | Behavior |
 | --- | --- |
@@ -196,20 +198,11 @@ reports the matching `totalCount`. Invalid or non-integer pagination returns 400
 with validation ProblemDetails. Large valid page numbers also return an empty
 page: the offset is calculated with a `long` so multiplication cannot wrap around.
 
-With SQL Server and the API running, try:
-
-```powershell
-$searchUrl = 'http://localhost:5100/api/books/search'
-Invoke-RestMethod -Uri $searchUrl | ConvertTo-Json -Depth 5
-Invoke-RestMethod -Uri "${searchUrl}?title=dUnE&author=HERBERT&pageNumber=1&pageSize=1" | ConvertTo-Json -Depth 5
-Invoke-RestMethod -Uri "${searchUrl}?title=dune&author=herbert&pageNumber=2&pageSize=1" | ConvertTo-Json -Depth 5
-Invoke-RestMethod -Uri "${searchUrl}?pageNumber=2147483647&pageSize=100" | ConvertTo-Json -Depth 5
-# This intentionally returns 400 (PowerShell displays the HTTP error).
-Invoke-RestMethod -Uri "${searchUrl}?pageSize=101"
-```
-
-An unchanged sample catalog has two books matching `dune` and `herbert`. The
-first two filtered requests each return one book and report `totalCount: 2`.
+With both applications running, [authorize SearchOAuth in Swagger](docs/api-security-swagger.md#implicit-login-and-search)
+and use **Try it out** on `GET /api/books/search`. Try `title=dUnE`,
+`author=HERBERT`, `pageNumber=1`, and `pageSize=1`; repeat with page 2.
+An unchanged sample catalog has two matching books, so each page has one item and
+`totalCount: 2`. Try page `2147483647` for an empty page and size `101` for a 400.
 
 `BooksController` binds query parameters and uses the existing MVC validation.
 `BookService` composes the filters, counts the matches, and selects only the
@@ -244,15 +237,15 @@ without duplicate seeding. An empty database returned an empty page in Productio
 EF reported no pending model changes. The temporary database was removed and the
 existing `Bookstore` rows and migration history were confirmed unchanged. These
 were manual SQL Server checks; no integration-test project or package was added.
-API authentication/401/403, API HTTPS, and Visual Studio UI behavior remain
-unverified. The next section covers the authorization-server checks.
+Those historical checks predate authentication; see the
+[security guide](docs/api-security-swagger.md#verification) for current checks.
 
 ## OAuth authorization server
 
 `Bookstore.Auth` now provides local OpenIddict token issuance and minimal Identity
 login/logout over HTTPS. It uses `BookstoreAuth`, a separate database in the same
-SQL Server container. The API still accepts requests without tokens: validation
-and endpoint scope enforcement belong to `feat/api-security-swagger` next.
+SQL Server container. The API validates its signed access tokens and enforces a
+different scope for CRUD and search.
 
 | Client | Flow | Permitted scope |
 | --- | --- | --- |
@@ -270,7 +263,8 @@ explicit signing/encryption credentials.
 See the [OAuth server guide](docs/oauth-server.md) for setup, both flow examples,
 exact callback URLs, certificate and token decisions, production provisioning,
 and checks performed. The Development browser callback has been exercised in
-Edge. The reserved Swagger callback and API 401/403 behavior await the next branch.
+Edge. The [API security/Swagger guide](docs/api-security-swagger.md) explains token
+validation, the Swagger callback, management-token setup, and 401/403 behavior.
 
 ## SQL Server persistence
 
@@ -315,7 +309,7 @@ From the repository root:
 ```powershell
 dotnet tool restore
 dotnet ef database update --project src/Bookstore.Api -- --environment Development
-dotnet run --project src/Bookstore.Api --launch-profile http
+dotnet run --project src/Bookstore.Api --launch-profile https
 ```
 
 The local `dotnet-ef` tool and EF packages are pinned to `10.0.12`. The migration
@@ -409,7 +403,10 @@ Ensure `.artifacts` exists first and supply `ConnectionStrings__Bookstore` throu
 the deployment's secret configuration. Apply the reviewed SQL with a deployment
 identity allowed to change the schema; configure the runtime API with a different
 login limited to the required data operations. Use a trusted SQL Server certificate
-and `TrustServerCertificate=False`. This local Developer-edition Compose service
+and `TrustServerCertificate=False`. Also set `Authentication__Authority` to the
+deployed HTTPS issuer (including its trailing slash) and `Authentication__Audience`
+to `bookstore-api`. The base Authority placeholder is intentionally empty, so a
+Production host cannot silently trust the local development issuer. This local Developer-edition Compose service
 is a demo setup, not production provisioning. Never run a production migration
 with the Development environment selected.
 
@@ -433,9 +430,10 @@ Checked locally on Windows against the Compose SQL Server container:
   SQL script. The production script was generated, not deployed to a production
   environment.
 
-Visual Studio UI startup and API HTTPS were not exercised. Full application
-containers and API scope enforcement remain later checkpoints. No integration-test
-project or database-test package was introduced.
+API HTTPS and scope enforcement were outside that persistence checkpoint; current
+checks are in the security guide. Visual Studio UI startup and full application
+containers remain unverified. No integration-test project or database-test package
+was introduced.
 
 ## Contract
 
@@ -497,8 +495,8 @@ Both real OAuth flows and their verification are documented in the Auth guide.
 Token lifetime, audience, client IDs, implicit consent, and the development
 callback are our implementation choices, not extra assignment requirements.
 The required implicit flow is implemented explicitly; Authorization Code with
-PKCE is a production recommendation. API enforcement, Swagger, and application
-containers follow in later checkpoints.
+PKCE is a production recommendation. API enforcement and Swagger are implemented;
+application containers follow in the next checkpoint.
 
 ### Current implementation
 
