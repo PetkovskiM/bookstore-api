@@ -7,6 +7,45 @@ namespace Bookstore.Api.Services;
 
 public sealed class BookService(BookstoreDbContext database)
 {
+    private const string SearchCollation = "Latin1_General_100_CI_AS_SC";
+
+    public async Task<BookSearchResponse> SearchAsync(BookSearchRequest request, CancellationToken cancellationToken)
+    {
+        var query = database.Books.AsNoTracking();
+
+        // Explicit collation keeps search case-insensitive even in a case-sensitive database.
+        if (request.Title is { } title)
+        {
+            query = query.Where(book => EF.Functions.Collate(book.Title, SearchCollation).Contains(title));
+        }
+
+        if (request.Author is { } author)
+        {
+            query = query.Where(book => EF.Functions.Collate(book.Author.Name, SearchCollation).Contains(author));
+        }
+
+        var totalCount = await query.CountAsync(cancellationToken);
+        var offset = request.GetOffset();
+
+        // Check the long offset before converting it for Skip: huge valid pages are empty.
+        if (offset >= totalCount)
+        {
+            return new BookSearchResponse([], totalCount, request.PageNumber, request.PageSize);
+        }
+
+        var items = await query.OrderBy(book => book.BookId)
+            .Skip((int)offset)
+            .Take(request.PageSize)
+            .Select(book => new BookResponse(
+                book.BookId,
+                new AuthorResponse(book.Author.AuthorId, book.Author.Name),
+                book.Title,
+                book.SubTitle))
+            .ToListAsync(cancellationToken);
+
+        return new BookSearchResponse(items, totalCount, request.PageNumber, request.PageSize);
+    }
+
     public async Task<BookResponse> GetByIdAsync(int bookId, CancellationToken cancellationToken)
     {
         var book = await database.Books.AsNoTracking()

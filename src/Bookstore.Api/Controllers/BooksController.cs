@@ -9,6 +9,14 @@ namespace Bookstore.Api.Controllers;
 [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError)]
 public sealed class BooksController(BookService books) : ControllerBase
 {
+    [HttpGet("search")]
+    [ProducesResponseType<BookSearchResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<BookSearchResponse>> Search([FromQuery] BookSearchRequest request, CancellationToken cancellationToken)
+    {
+        return Ok(await books.SearchAsync(request, cancellationToken));
+    }
+
     [HttpGet("{bookId:int}")]
     [ProducesResponseType<BookResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]

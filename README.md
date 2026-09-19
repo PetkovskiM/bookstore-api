@@ -1,9 +1,10 @@
 # Bookstore API
 
 An ASP.NET Core bookstore API. The solution setup, Book/Author contracts and
-validation, unit tests, EF Core SQL Server persistence, and book CRUD are implemented.
+validation, unit tests, EF Core SQL Server persistence, book CRUD, and paginated search
+are implemented.
 SQL Server runs in Docker; the applications still run locally or in Visual Studio.
-Search, authentication, a demonstration client, application containers,
+Authentication, a demonstration client, application containers,
 and CI are planned for later checkpoints.
 
 ## Solution
@@ -12,9 +13,9 @@ Open `Bookstore.slnx`, the solution containing all three .NET 10 projects:
 
 | Project | Purpose |
 | --- | --- |
-| `src/Bookstore.Api` | Book CRUD controller/service, contracts, ProblemDetails errors, EF Core DbContext, migrations, and development sample data; search comes next. |
+| `src/Bookstore.Api` | Book CRUD and search controller/service, contracts, ProblemDetails errors, EF Core DbContext, migrations, and development sample data. |
 | `src/Bookstore.Auth` | Empty web host; future local OAuth2 server using OpenIddict and minimal ASP.NET Core Identity. |
-| `tests/Bookstore.UnitTests` | xUnit tests for validation, JSON contracts, author-reference rules, error responses, and safe exception logging. |
+| `tests/Bookstore.UnitTests` | xUnit tests for validation, pagination offsets, JSON contracts, author-reference rules, error responses, and safe exception logging. |
 
 ## Prerequisites and Visual Studio
 
@@ -56,8 +57,8 @@ run these unit tests. The validation tests call MVC's object validator directly,
 including its validation of nested authors. JSON tests use the web serializer
 defaults. No HTTP server, database, or integration-test packages are involved.
 
-Verified for the CRUD step with SDK `10.0.400`: package restore passed,
-build passed with zero warnings/errors, and all 66 unit-test cases passed.
+Verified for the search step with SDK `10.0.400`: package restore passed,
+build passed with zero warnings/errors, and all 71 unit-test cases passed.
 Database checks are recorded below; the unit tests themselves use no database.
 
 Complete the database setup below before starting the API. To start either host
@@ -69,7 +70,7 @@ dotnet run --project src/Bookstore.Auth --launch-profile http
 ```
 
 The API uses `http://localhost:5100`; Auth uses `http://localhost:5200`.
-The API serves the CRUD routes below; its root path still returns 404.
+The API serves the CRUD and search routes below; its root path still returns 404.
 Auth remains a placeholder host with no endpoints.
 In Development, API startup applies migrations and initializes an empty catalog.
 In Visual Studio, set either web project as the startup project and select its
@@ -81,7 +82,6 @@ respectively. Certificate trust and HTTPS startup have not been verified here.
 
 This is a local development checkpoint. The endpoints currently have no
 authentication; the required OAuth client-credentials protection is a later step.
-Search and its pagination are also a later step.
 
 | Method and route | Success | Behavior |
 | --- | --- | --- |
@@ -162,8 +162,83 @@ PUT replacement and subtitle clearing, missing books, deletion retaining authors
 ProblemDetails (400/404/405/409/415/500), and persistence across an API restart.
 The temporary database was removed; the existing `Bookstore` rows and migration
 history were compared before/after and remained unchanged. No integration-test
-project or additional test package was added. OAuth/401/403, search, HTTPS, and
-Visual Studio UI behavior were not verified in this checkpoint.
+project or additional test package was added. Search was verified in the following
+checkpoint; OAuth/401/403, HTTPS, and Visual Studio UI behavior remain unverified.
+
+## Book search
+
+`GET /api/books/search` returns matching books and their authors. Like the CRUD
+routes at this checkpoint, search is currently unauthenticated. Its required
+OAuth implicit flow and `books.search` scope will be added in the authentication step.
+
+| Query parameter | Behavior |
+| --- | --- |
+| `title` | Optional case-insensitive substring of the book title. |
+| `author` | Optional case-insensitive substring of the author's name. |
+| `pageNumber` | Positive integer; defaults to 1. |
+| `pageSize` | Integer from 1 to 100; defaults to 10. |
+
+Filters are trimmed; blank filters are ignored. Supplying both filters requires
+both to match (AND). Omitting both lists all books, paginated. Search text is
+literal: `%`, `_`, and `[` do not act as wildcards. The response contains `items`,
+`totalCount` (all matches before pagination), `pageNumber`, and `pageSize`.
+Items use the same nested author and `subTitle` spelling as GET by ID.
+
+Books are always ordered by `bookId` before pagination. No matches or a page
+beyond the last match returns 200 with an empty `items` array; the latter still
+reports the matching `totalCount`. Invalid or non-integer pagination returns 400
+with validation ProblemDetails. Large valid page numbers also return an empty
+page: the offset is calculated with a `long` so multiplication cannot wrap around.
+
+With SQL Server and the API running, try:
+
+```powershell
+$searchUrl = 'http://localhost:5100/api/books/search'
+Invoke-RestMethod -Uri $searchUrl | ConvertTo-Json -Depth 5
+Invoke-RestMethod -Uri "${searchUrl}?title=dUnE&author=HERBERT&pageNumber=1&pageSize=1" | ConvertTo-Json -Depth 5
+Invoke-RestMethod -Uri "${searchUrl}?title=dune&author=herbert&pageNumber=2&pageSize=1" | ConvertTo-Json -Depth 5
+Invoke-RestMethod -Uri "${searchUrl}?pageNumber=2147483647&pageSize=100" | ConvertTo-Json -Depth 5
+# This intentionally returns 400 (PowerShell displays the HTTP error).
+Invoke-RestMethod -Uri "${searchUrl}?pageSize=101"
+```
+
+An unchanged sample catalog has two books matching `dune` and `herbert`. The
+first two filtered requests each return one book and report `totalCount: 2`.
+
+`BooksController` binds query parameters and uses the existing MVC validation.
+`BookService` composes the filters, counts the matches, and selects only the
+requested page and response fields in SQL. Reads are asynchronous, accept request
+cancellation, and do not track entities. Count and page are separate reads, so
+concurrent catalog changes can affect counts or the contents of later pages.
+
+The search expressions explicitly use SQL Server's `Latin1_General_100_CI_AS_SC`
+collation (text comparison rules). It ignores case, distinguishes accents, and
+supports supplementary Unicode characters. This implementation choice guarantees
+case-insensitive search even when the database defaults to case-sensitive
+comparisons; the PDF does not specify a collation or accent handling. No schema
+change or migration is needed. Explicit query collations can limit index use;
+this small catalog does not yet need additional search indexes. See
+[EF Core collation guidance](https://learn.microsoft.com/en-us/ef/core/miscellaneous/collations-and-case-sensitivity).
+
+### Search verification
+
+The search checkpoint passed all 71 unit-test cases, including offset boundaries
+that exceed `int.MaxValue`, and 79 live HTTP requests against a temporary SQL
+Server database. That database deliberately used a case-sensitive default;
+ordinary SQL title comparisons were confirmed case-sensitive before checking
+that the API still matched titles and authors without regard to case.
+
+The HTTP checks covered trimmed/blank/combined filters, literal wildcard and quote
+characters, Unicode, short and long filters, defaults, full/partial/empty pages,
+maximum page size, very large page numbers, counts and ID ordering, response
+fields, invalid query parameters and ProblemDetails, and changes made through
+CRUD appearing in search. An API restart preserved the rows and search results
+without duplicate seeding. An empty database returned an empty page in Production.
+
+EF reported no pending model changes. The temporary database was removed and the
+existing `Bookstore` rows and migration history were confirmed unchanged. These
+were manual SQL Server checks; no integration-test project or package was added.
+OAuth/401/403, HTTPS, and Visual Studio UI behavior remain unverified.
 
 ## SQL Server persistence
 
@@ -326,8 +401,8 @@ Checked locally on Windows against the Compose SQL Server container:
   SQL script. The production script was generated, not deployed to a production
   environment.
 
-Visual Studio UI startup and HTTPS were not exercised. Full application containers,
-search, and OAuth remain later checkpoints. No integration-test
+Visual Studio UI startup and HTTPS were not exercised. Full application containers
+and OAuth remain later checkpoints. No integration-test
 project or database-test package was introduced.
 
 ## Contract
@@ -363,8 +438,8 @@ those versions, libraries, or project boundaries. xUnit tests, setup documentati
 and the later CI workflow are our agreed delivery practices.
 
 The following contract details are agreed assumptions beyond the PDF's model and
-flow requirements. Contracts, validation, persistence, and book CRUD are
-implemented. Search request validation exists; search execution is the next step.
+flow requirements. Contracts, validation, persistence, book CRUD, and search are
+implemented.
 
 - Book and Author IDs are database-generated integers. Book write DTOs omit
   `bookId`; responses include both IDs. Explicit `bookId` on creation is rejected;
@@ -412,9 +487,9 @@ The book service checks an existing author's ID and name before writing.
 Subtitle text is preserved, with no extra length limit. A missing or null subtitle
 becomes `null` in the replacement request and clears the stored value on PUT.
 
-`BookSearchRequest` trims title/author filters, treats blanks as absent, and
-validates pagination. It does not execute a search. `BookResponse` includes both
-IDs with a nested author; `BookSearchResponse` adds `items`, `totalCount`,
+`BookSearchRequest` trims title/author filters, treats blanks as absent, validates
+pagination, and calculates the offset. `BookService` executes the filtered query.
+`BookResponse` includes both IDs with a nested author; `BookSearchResponse` adds `items`, `totalCount`,
 `pageNumber`, and `pageSize`.
 
 ### Contract examples
@@ -442,8 +517,9 @@ Created response shape; IDs here are illustrative database-generated values:
 
 To reference an existing author, the write payload uses
 `"author": { "authorId": 1, "name": "Frank Herbert" }`. The service checks
-that ID exists and the trimmed name matches. The future search endpoint will accept
-`title=Dune&author=Herbert&pageNumber=1&pageSize=10`; its response shape is:
+that ID exists and the trimmed name matches. Search accepts
+`title=Dune&author=Herbert&pageNumber=1&pageSize=10`. For a query with no matches,
+the response is:
 
 ```json
 {
