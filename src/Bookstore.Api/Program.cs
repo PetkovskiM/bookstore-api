@@ -1,12 +1,31 @@
 using Bookstore.Api.Data;
 using Bookstore.Api.Errors;
+using Bookstore.Api.OpenApi;
+using Bookstore.Api.Security;
 using Bookstore.Api.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Swashbuckle.AspNetCore.SwaggerGen;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Authentication failures can contain token details at information/debug level.
+builder.Logging.AddFilter("Microsoft.AspNetCore.Authentication", LogLevel.Warning);
+builder.Services.AddOptions<JwtSettings>()
+    .BindConfiguration("Authentication")
+    .Validate(settings => settings.IsValid(), "Configure an HTTPS Authentication:Authority and nonblank Authentication:Audience. See README.md.")
+    .ValidateOnStart();
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
+builder.Services.AddSingleton<IConfigureOptions<JwtBearerOptions>, ConfigureJwtBearerOptions>();
+builder.Services.AddBookAuthorization();
 builder.Services.AddControllers();
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.AddSwaggerGen();
+    builder.Services.AddTransient<IConfigureOptions<SwaggerGenOptions>, ConfigureSwaggerOptions>();
+}
 builder.Services.AddScoped<BookService>();
 builder.Services.AddProblemDetails(options =>
 {
@@ -56,6 +75,33 @@ app.UseStatusCodePages(async context =>
         .ExecuteAsync(httpContext);
 });
 
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+}
+app.Use(async (context, next) =>
+{
+    if (!context.Request.IsHttps)
+    {
+        await Results.Problem(statusCode: 400, title: "HTTPS is required.").ExecuteAsync(context);
+        return;
+    }
+    await next(context);
+});
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "Bookstore API v1");
+        options.OAuthClientId("bookstore-browser");
+        options.OAuthScopes(BookAuthorization.Search);
+        options.ConfigObject.PersistAuthorization = false;
+        options.ConfigObject.ValidatorUrl = null;
+    });
+}
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapControllers();
 
 app.Run();

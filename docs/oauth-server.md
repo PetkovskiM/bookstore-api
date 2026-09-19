@@ -1,8 +1,8 @@
 # Local OAuth server
 
 `Bookstore.Auth` uses OpenIddict 7.7.1 and ASP.NET Core Identity on .NET 10.
-It issues tokens; API token validation and scope enforcement are the next
-`feat/api-security-swagger` checkpoint. The book endpoints are still unprotected.
+It issues tokens that the API validates, with separate scopes for CRUD and search.
+See the [API security/Swagger guide](api-security-swagger.md) for the demonstration.
 The applications run locally against the existing SQL Server container. Full
 application containers are a later checkpoint.
 
@@ -101,9 +101,8 @@ Use **Back to your account > Sign out** to clear the Identity session.
 
 The initial browser registration allows exactly these HTTPS callbacks:
 
-- `https://localhost:7200/demo/callback` for this checkpoint's flow check.
-- `https://localhost:7100/swagger/oauth2-redirect.html` reserved for the next
-  checkpoint; Swagger is not implemented or verified yet.
+- `https://localhost:7200/demo/callback` for the standalone flow check.
+- `https://localhost:7100/swagger/oauth2-redirect.html` for Swagger search authorization.
 
 Unregistered callback addresses are rejected. The browser client can request only
 `books.search`; management can request only `books.manage`. Missing scopes and
@@ -166,7 +165,10 @@ Production startup performs no migrations or demo seeding. Before deployment:
    using the commands below with the Production environment.
 3. Configure `Auth__Issuer` with the deployed HTTPS issuer and provision the two
    clients through OpenIddict's application manager with the grants, scopes, and
-   exact deployed callback URIs above. Provision real Identity users through
+   exact deployed callback URIs above. Set `Auth:BrowserRedirectUris` to those
+   HTTPS callbacks as well, so the login form's security policy permits their
+   origins during browser redirects. This configuration does not overwrite
+   database registrations. Provision real Identity users through
    `UserManager`; do not insert plaintext credentials into database tables.
 4. Supply separate RSA signing and encryption certificates with private keys,
    using `Certificates__Signing__Path`, `Certificates__Signing__Password`,
@@ -215,7 +217,8 @@ returned 404 for the demo page. An idempotent Production SQL script was generate
 The test database and certificate files were removed; actual Auth user/client
 records and existing Bookstore data remained unchanged.
 
-API token enforcement, cross-scope API 401/403 checks, Swagger's callback, Visual
-Studio UI startup, and full application containers are not verified in this
-checkpoint. They belong to the following steps. No integration-test project or
+These checks describe the OAuth server checkpoint. Subsequent API token enforcement,
+cross-scope 401/403 checks and Swagger's callback are documented in the
+[API security guide](api-security-swagger.md#verification). Visual Studio UI startup
+and full application containers remain unverified. No integration-test project or
 package was added to the solution.

@@ -12,6 +12,7 @@ if (!AuthSettings.IsHttpsAddress(settings.Issuer))
 {
     throw new InvalidOperationException("Configure Auth:Issuer as an absolute HTTPS address. See README.md.");
 }
+var formActionSources = settings.GetFormActionSources();
 
 // OpenIddict information/debug messages can contain protocol requests and token responses.
 builder.Logging.AddFilter("OpenIddict", LogLevel.Warning);
@@ -99,7 +100,7 @@ app.Use(async (context, next) =>
     context.Response.Headers.CacheControl = "no-store";
     context.Response.Headers["Referrer-Policy"] = "no-referrer";
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
-    context.Response.Headers.ContentSecurityPolicy = "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
+    context.Response.Headers.ContentSecurityPolicy = $"default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action {formActionSources}";
     if (!context.Request.IsHttps)
     {
         await Results.Problem(statusCode: 400, title: "HTTPS is required.").ExecuteAsync(context);
