@@ -72,4 +72,17 @@ public sealed class BookSearchRequestTests
 
         Assert.True(RequestValidation.Validate(request).IsValid);
     }
+
+    [Theory]
+    [InlineData(1, 10, 0L)]
+    [InlineData(2, 10, 10L)]
+    [InlineData(3, 25, 50L)]
+    [InlineData(21_474_838, 100, 2_147_483_700L)]
+    [InlineData(int.MaxValue, 100, 214_748_364_600L)]
+    public void Page_offsets_do_not_overflow_for_large_valid_page_numbers(int pageNumber, int pageSize, long expectedOffset)
+    {
+        var request = new BookSearchRequest { PageNumber = pageNumber, PageSize = pageSize };
+
+        Assert.Equal(expectedOffset, request.GetOffset());
+    }
 }

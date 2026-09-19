@@ -25,6 +25,9 @@ public sealed class BookSearchRequest
     [Range(1, 100, ErrorMessage = "Page size must be between 1 and 100.")]
     public int PageSize { get; set; } = 10;
 
+    // Valid page numbers can produce an offset larger than an int can hold.
+    public long GetOffset() => ((long)PageNumber - 1) * PageSize;
+
     private static string? NormalizeFilter(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
