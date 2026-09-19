@@ -1,9 +1,9 @@
 # Bookstore API
 
 An ASP.NET Core bookstore API. The solution setup, Book/Author contracts and
-validation, unit tests, and EF Core SQL Server persistence are implemented.
+validation, unit tests, EF Core SQL Server persistence, and book CRUD are implemented.
 SQL Server runs in Docker; the applications still run locally or in Visual Studio.
-Book endpoints, authentication, a demonstration client, application containers,
+Search, authentication, a demonstration client, application containers,
 and CI are planned for later checkpoints.
 
 ## Solution
@@ -12,9 +12,9 @@ Open `Bookstore.slnx`, the solution containing all three .NET 10 projects:
 
 | Project | Purpose |
 | --- | --- |
-| `src/Bookstore.Api` | Controller support, Book/Author contracts, EF Core DbContext, migrations, and development sample data; future CRUD and search. |
+| `src/Bookstore.Api` | Book CRUD controller/service, contracts, ProblemDetails errors, EF Core DbContext, migrations, and development sample data; search comes next. |
 | `src/Bookstore.Auth` | Empty web host; future local OAuth2 server using OpenIddict and minimal ASP.NET Core Identity. |
-| `tests/Bookstore.UnitTests` | xUnit tests for request validation, normalization, pagination boundaries, and JSON contracts. |
+| `tests/Bookstore.UnitTests` | xUnit tests for validation, JSON contracts, author-reference rules, error responses, and safe exception logging. |
 
 ## Prerequisites and Visual Studio
 
@@ -56,8 +56,8 @@ run these unit tests. The validation tests call MVC's object validator directly,
 including its validation of nested authors. JSON tests use the web serializer
 defaults. No HTTP server, database, or integration-test packages are involved.
 
-Verified for the persistence step with SDK `10.0.400`: package and tool restore
-passed, build passed with zero warnings/errors, and all 53 unit-test cases passed.
+Verified for the CRUD step with SDK `10.0.400`: package restore passed,
+build passed with zero warnings/errors, and all 66 unit-test cases passed.
 Database checks are recorded below; the unit tests themselves use no database.
 
 Complete the database setup below before starting the API. To start either host
@@ -69,12 +69,101 @@ dotnet run --project src/Bookstore.Auth --launch-profile http
 ```
 
 The API uses `http://localhost:5100`; Auth uses `http://localhost:5200`.
-An HTTP 404 is expected for every path because neither host has endpoints yet.
+The API serves the CRUD routes below; its root path still returns 404.
+Auth remains a placeholder host with no endpoints.
 In Development, API startup applies migrations and initializes an empty catalog.
 In Visual Studio, set either web project as the startup project and select its
 `http` profile. For the optional `https` profiles, first trust the local development
 certificate with `dotnet dev-certs https --trust`; HTTPS uses ports 7100 and 7200
 respectively. Certificate trust and HTTPS startup have not been verified here.
+
+## Book CRUD
+
+This is a local development checkpoint. The endpoints currently have no
+authentication; the required OAuth client-credentials protection is a later step.
+Search and its pagination are also a later step.
+
+| Method and route | Success | Behavior |
+| --- | --- | --- |
+| `POST /api/books` | 201 | Returns the created book and a `Location` header pointing to its GET route. |
+| `GET /api/books/{bookId}` | 200 | Returns one book with its nested author. |
+| `PUT /api/books/{bookId}` | 200 | Replaces title, author reference, and subtitle; returns the updated book. |
+| `DELETE /api/books/{bookId}` | 204 | Deletes that book; the response body is empty and the author remains. |
+
+IDs in routes are integers. Missing books return 404; PUT never creates a missing
+book. Creation rejects a supplied `bookId`, including `0` or `null`. PUT always
+uses the route ID; an extra body `bookId` is ignored like other unmapped fields.
+Missing/null subtitles clear the stored subtitle on PUT.
+
+For both writes, omitting `authorId` creates a new author, even if another author
+has the same name. Supplying an existing ID reuses that author. The supplied name
+must match the stored name after trimming, using an ordinal, case-sensitive
+comparison. Unknown author IDs return a 400 validation problem; mismatched names
+return 409. Neither operation renames a shared author. There is no author API.
+
+`BooksController` handles routes and HTTP responses. `BookService` uses the
+DbContext directly, with async database operations and request cancellation
+tokens. `AuthorRules` holds the rule shared by creation and replacement so it can
+be tested without a database. A new author and its book are saved in one EF
+transaction. DTO responses prevent database navigation properties from leaking
+into JSON or producing reference cycles. The schema is unchanged in this step.
+
+### Try the endpoints from PowerShell
+
+Complete the [local database setup](#local-setup), start the API with the run
+command above, then run in another terminal:
+
+```powershell
+$booksUrl = 'http://localhost:5100/api/books'
+$creation = @{
+    title = '  Demo Book  '
+    author = @{ name = 'Demo Author' }
+    subTitle = 'First edition'
+} | ConvertTo-Json
+
+$created = Invoke-RestMethod -Method Post -Uri $booksUrl -ContentType 'application/json' -Body $creation
+$bookUrl = "$booksUrl/$($created.bookId)"
+Invoke-RestMethod -Uri $bookUrl
+
+$replacement = @{
+    title = 'Updated Demo Book'
+    author = @{ authorId = $created.author.authorId; name = $created.author.name }
+} | ConvertTo-Json
+
+# Omitting subTitle clears it. The book ID and author ID stay the same here.
+Invoke-RestMethod -Method Put -Uri $bookUrl -ContentType 'application/json' -Body $replacement
+Invoke-WebRequest -UseBasicParsing -Method Delete -Uri $bookUrl | Select-Object StatusCode
+```
+
+This walkthrough creates one author. Deleting the demo book intentionally leaves
+that author in the database. Use IDs returned by the API rather than assuming a
+particular seed ID.
+
+### Errors and checks
+
+Errors use `application/problem+json`, including a status, title, type, request
+path in `instance`, and a `traceId`. Validation failures also include an `errors`
+dictionary; an unknown author is reported under `Author.AuthorId`. Invalid JSON,
+missing required fields, and failed length checks return 400. Unsupported media
+types return 415; unsupported methods return 405. Unknown routes return 404.
+
+`AddProblemDetails()` and `IExceptionHandler` handle errors in both Development
+and Production. Unexpected exceptions return a generic 500; the handler logs
+only the exception type and trace ID. Raw exception messages, request bodies,
+headers, and connection strings are not included in that log or error response.
+ASP.NET Core's raw exception diagnostics are suppressed in favor of that safe log.
+See [ASP.NET Core error handling](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/error-handling?view=aspnetcore-10.0).
+
+The CRUD checkpoint passed 66 unit tests and 45 live HTTP requests against a
+temporary, isolated SQL Server database. Those HTTP checks covered all four
+operations, generated IDs and Location, trimming and length boundaries, long
+subtitles, author creation/reuse/conflicts, failed writes leaving data unchanged,
+PUT replacement and subtitle clearing, missing books, deletion retaining authors,
+ProblemDetails (400/404/405/409/415/500), and persistence across an API restart.
+The temporary database was removed; the existing `Bookstore` rows and migration
+history were compared before/after and remained unchanged. No integration-test
+project or additional test package was added. OAuth/401/403, search, HTTPS, and
+Visual Studio UI behavior were not verified in this checkpoint.
 
 ## SQL Server persistence
 
@@ -155,7 +244,7 @@ Request setters already trim names/titles and validate their 3-100 character
 length. The database additionally rejects null/overlong values and values shorter
 than three characters after trimming ordinary SQL spaces. These checks protect
 storage; the request layer remains responsible for full .NET whitespace trimming
-and useful validation messages. No service or controller is added in this step.
+and useful validation messages before the book service performs a write.
 
 ### Development sample data and repeat startup
 
@@ -238,7 +327,7 @@ Checked locally on Windows against the Compose SQL Server container:
   environment.
 
 Visual Studio UI startup and HTTPS were not exercised. Full application containers,
-HTTP book operations, and OAuth remain later checkpoints. No integration-test
+search, and OAuth remain later checkpoints. No integration-test
 project or database-test package was introduced.
 
 ## Contract
@@ -274,14 +363,14 @@ those versions, libraries, or project boundaries. xUnit tests, setup documentati
 and the later CI workflow are our agreed delivery practices.
 
 The following contract details are agreed assumptions beyond the PDF's model and
-flow requirements. Request shapes, local validation, and persistence are
-implemented; book-write behavior, HTTP responses, and search await later steps.
+flow requirements. Contracts, validation, persistence, and book CRUD are
+implemented. Search request validation exists; search execution is the next step.
 
 - Book and Author IDs are database-generated integers. Book write DTOs omit
   `bookId`; responses include both IDs. Explicit `bookId` on creation is rejected;
   callers cannot select new primary keys.
 - An author without `authorId` creates a new author. A positive `authorId` must
-  exist (otherwise 400), and the supplied name must match after trimming
+  exist (otherwise 400), and the supplied name must match case-sensitively after trimming
   (otherwise 409). Book writes do not rename shared authors or merge them by name.
 - Trim titles and author names before applying the assignment's length limits.
 - CRUD uses `/api/books`; search uses `/api/books/search`. PUT replaces editable
@@ -318,10 +407,10 @@ field in the request contract.
 Title and author-name setters trim input before the built-in required/length
 validation runs. Request properties are nullable so missing input can produce
 validation errors; this does not make required fields optional. An absent/null
-`authorId` represents a new author; a supplied integer must be positive. Verifying
-an existing author's ID and name needs the future database service.
+`authorId` represents a new author; a supplied integer must be positive.
+The book service checks an existing author's ID and name before writing.
 Subtitle text is preserved, with no extra length limit. A missing or null subtitle
-becomes `null` in the replacement request; clearing the stored value comes later.
+becomes `null` in the replacement request and clears the stored value on PUT.
 
 `BookSearchRequest` trims title/author filters, treats blanks as absent, and
 validates pagination. It does not execute a search. `BookResponse` includes both
@@ -330,7 +419,7 @@ IDs with a nested author; `BookSearchResponse` adds `items`, `totalCount`,
 
 ### Contract examples
 
-Example creation payload (the endpoint is not implemented yet):
+Example payload for `POST /api/books`:
 
 ```json
 {
@@ -340,8 +429,7 @@ Example creation payload (the endpoint is not implemented yet):
 }
 ```
 
-Expected response shape once creation is implemented; IDs here
-are illustrative database-generated values:
+Created response shape; IDs here are illustrative database-generated values:
 
 ```json
 {
@@ -353,8 +441,8 @@ are illustrative database-generated values:
 ```
 
 To reference an existing author, the write payload uses
-`"author": { "authorId": 1, "name": "Frank Herbert" }`. The service will check
-that ID exists and the trimmed name matches. A search request can supply
+`"author": { "authorId": 1, "name": "Frank Herbert" }`. The service checks
+that ID exists and the trimmed name matches. The future search endpoint will accept
 `title=Dune&author=Herbert&pageNumber=1&pageSize=10`; its response shape is:
 
 ```json
@@ -367,8 +455,9 @@ that ID exists and the trimmed name matches. A search request can supply
 ```
 
 These examples will also be included in OpenAPI when the demonstration client is
-added. No HTTP status codes, persistence, or OAuth behavior are proven by the
-current unit tests.
+added. Unit tests cover input/author rules and exception response behavior; the
+SQL Server and live HTTP checks are separate manual verification. OAuth has not
+been implemented or verified yet.
 
 ## Local files
 
