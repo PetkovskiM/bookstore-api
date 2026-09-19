@@ -1,0 +1,14 @@
+@model Bookstore.Auth.Models.LoginRequest
+@{
+    ViewData["Title"] = "Sign in";
+}
+<h1>Sign in</h1>
+<form asp-controller="Account" asp-action="Login" method="post">
+    <div asp-validation-summary="All" role="alert"></div>
+    <input asp-for="ReturnUrl" type="hidden" />
+    <label asp-for="UserName"></label>
+    <input asp-for="UserName" autocomplete="username" required autofocus />
+    <label asp-for="Password"></label>
+    <input asp-for="Password" autocomplete="current-password" required />
+    <button type="submit">Sign in</button>
+</form>

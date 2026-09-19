@@ -1,0 +1,20 @@
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment Environment
+@{
+    ViewData["Title"] = "Account";
+}
+<h1>Bookstore account</h1>
+@if (User.Identity?.IsAuthenticated == true)
+{
+    <p>You are signed in.</p>
+    <form asp-controller="Account" asp-action="Logout" method="post">
+        <button type="submit">Sign out</button>
+    </form>
+}
+else
+{
+    <p><a href="/account/login">Sign in</a> to continue.</p>
+}
+@if (Environment.IsDevelopment())
+{
+    <p><a href="/demo">Try book-search sign-in</a></p>
+}
