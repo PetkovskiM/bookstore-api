@@ -276,12 +276,12 @@ function New-ContainerConnectionString {
     param([Parameter(Mandatory = $true)][string] $DatabaseName, [Parameter(Mandatory = $true)][string] $Password)
 
     $builder = New-Object System.Data.SqlClient.SqlConnectionStringBuilder
-    $builder.DataSource = 'sqlserver,1433'
-    $builder.InitialCatalog = $DatabaseName
-    $builder.UserID = 'sa'
-    $builder.Password = $Password
-    $builder.Encrypt = $true
-    $builder.TrustServerCertificate = $true
+    $builder['Data Source'] = 'sqlserver,1433'
+    $builder['Initial Catalog'] = $DatabaseName
+    $builder['User ID'] = 'sa'
+    $builder['Password'] = $Password
+    $builder['Encrypt'] = $true
+    $builder['TrustServerCertificate'] = $true
     return $builder.ConnectionString
 }
 

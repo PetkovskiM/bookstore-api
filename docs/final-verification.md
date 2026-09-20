@@ -12,8 +12,9 @@ in their original guides and are not presented as newly rerun tests.
 Update after the first second-laptop attempt: the former Docker preparation required
 SDK `10.0.400`, User Secrets, and `dotnet dev-certs`, so it did not meet the intended
 minimum Docker-only reviewer path. The initializer and documentation now remove those
-host dependencies. Its syntax and existing-configuration preservation were checked on
-the development machine; a fresh Docker clean-laptop retest is still required.
+host dependencies. Its complete first-run and repeat paths passed in an isolated
+Windows PowerShell 5.1 layout, including real temporary certificate generation and
+SQL connection parsing. A physical fresh Docker clean-laptop retest is still required.
 
 ## Requirement checklist
 
@@ -28,7 +29,7 @@ the development machine; a fresh Docker clean-laptop retest is still required.
 | Swagger/demo client | Pass | Both schemes and all five operations present. Actual search and management **Try it out** worked in headless Edge with normal HTTPS trust. Reload cleared Swagger authorization; no external validator requests occurred. |
 | SQL persistence and existing migrations | Pass | Both migration-history entries present; both IDs are SQL identity columns. No pending EF model changes; both idempotent Production scripts generated in memory. Full catalog/user/client/migration snapshots survived normal SQL restart, compared before application startup. |
 | Development seeding | Pass / Manual | Source gates seeding to Development; migrations contain no demo inserts. Repeated real startup preserved existing rows and user/client credentials. Fresh-database bootstrap was verified in earlier checkpoints; rerunning it on the second laptop remains manual. No existing database was reset here. |
-| Full Docker demo | Pass / Manual | Earlier `up -d --build --wait` checks built both images and started SQL/Auth/API; health, issuer routing, both flows, persistence and retained keys/cookies were checked. The new SDK-free first-run initializer has syntax and repeat-preservation evidence only; fresh Docker clean-laptop retest is required. |
+| Full Docker demo | Pass / Manual | Earlier `up -d --build --wait` checks built both images and started SQL/Auth/API; health, issuer routing, both flows, persistence and retained keys/cookies were checked. The new SDK-free initializer's first-run/repeat paths passed in isolated Windows PowerShell 5.1; a physical fresh Docker clean-laptop run is still required. |
 | CI restore/Release build/unit tests | Pass | Workflow path and badge match; SDK comes from `global.json`, triggers target `main`, no runtime services/secrets required. All equivalent local commands passed. Hosted PR and post-merge runs/green badge were confirmed by the developer; no GitHub setting was changed. |
 | Tracked secrets and generated files | Pass | Tracked-file inventory and content scan found no local credentials, private-key/JWT patterns, certificates, `.env`, runtime directories or build artifacts. Placeholder examples are intentional. This is a current-tree/known-value check, not a comprehensive scan of all historical commits. |
 | Production migration/seeding/certificate boundary | Pass | Source review: migration/seed hooks and demo UI are Development-only. In Production, Auth failed without an explicit signing certificate; API failed without an explicit HTTPS authority. EF generated schema-only SQL without a live database or signing credentials. |
@@ -67,6 +68,7 @@ password. `config --quiet` performs the requested validation without disclosing 
 | `docker compose --profile demo logs --no-color api auth` | Captured in memory, not printed. No actual demo/PFX credentials or issued JWTs found. |
 | PowerShell parser for `scripts/Initialize-DockerDemo.ps1` | Passed. The revised initializer has valid Windows PowerShell syntax and contains no `dotnet` command. |
 | `scripts/Initialize-DockerDemo.ps1` against the existing complete runtime configuration | Passed. It reported valid preserved configuration; before/after SHA-256 comparisons of `.env`, both JSON files, public/private HTTPS files, and OAuth PFX files were all unchanged. No values or hashes were printed. |
+| Isolated `powershell.exe` (Windows PowerShell 5.1) fresh-initialization smoke test | Passed. A temporary clean layout used the real first-run code to generate `.env`, JSON/PFX/CRT files and then verified both generated SQL connection strings through `SqlConnectionStringBuilder`. A second run preserved every generated file. Only the Docker volume-list command was mocked empty to avoid interacting with existing volumes; the temporary files and test certificates were removed. |
 | `git diff --check` | Passed after corrections/documentation updates. |
 
 The following additional commands were executed for this review. The `.artifacts`
@@ -124,7 +126,7 @@ The interrupted approval did not start the live workflow.
 | `docs/api-security-swagger.md` | Make Docker the primary Swagger flow and have its management-token command read ignored Docker `auth.json`. |
 | `docs/docker-demo.md` | Remove host-SDK/User Secrets/development-certificate prerequisites; document generated runtime material, preservation, trust, and mode boundaries. |
 | `docs/oauth-server.md` | Distinguish Docker credential storage from the optional local User Secrets path and retain Data Protection/rotation guidance. |
-| `scripts/Initialize-DockerDemo.ps1` | Replace the User Secrets/`dotnet dev-certs` dependency with first-run ignored Docker configuration/certificate generation, repeat-run validation/preservation, optional current-user HTTPS trust, and no secret output. |
+| `scripts/Initialize-DockerDemo.ps1` | Replace the User Secrets/`dotnet dev-certs` dependency with first-run ignored Docker configuration/certificate generation, repeat-run validation/preservation, optional current-user HTTPS trust, no secret output, and Windows PowerShell-safe SQL connection-string indexers. |
 | `tests/Bookstore.UnitTests/Authentication/ApiTokenValidationTests.cs` | Formatter-only line breaks in three object initializers. |
 | `tests/Bookstore.UnitTests/Authentication/SwaggerContractTests.cs` | Formatter-only indentation of a nested loop. |
 
