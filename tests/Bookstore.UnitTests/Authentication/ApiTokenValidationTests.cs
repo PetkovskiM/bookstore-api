@@ -23,7 +23,8 @@ public sealed class ApiTokenValidationTests
     {
         Assert.Equal(valid, new JwtSettings
         {
-            Authority = "https://localhost:7200/", BackchannelHost = host
+            Authority = "https://localhost:7200/",
+            BackchannelHost = host
         }.IsValid());
     }
 
@@ -33,7 +34,8 @@ public sealed class ApiTokenValidationTests
         var options = new JwtBearerOptions();
         new ConfigureJwtBearerOptions(Options.Create(new JwtSettings
         {
-            Authority = "https://localhost:7200/", BackchannelHost = "auth"
+            Authority = "https://localhost:7200/",
+            BackchannelHost = "auth"
         })).Configure(options);
 
         using var handler = Assert.IsType<SocketsHttpHandler>(options.BackchannelHttpHandler);
@@ -66,7 +68,8 @@ public sealed class ApiTokenValidationTests
         var options = new JwtBearerOptions();
         new ConfigureJwtBearerOptions(Options.Create(new JwtSettings
         {
-            Authority = "https://issuer.example/", Audience = "bookstore-api"
+            Authority = "https://issuer.example/",
+            Audience = "bookstore-api"
         })).Configure(options);
         options.TokenValidationParameters.IssuerSigningKey = trustedKey;
         var handler = new JwtSecurityTokenHandler { SetDefaultTimesOnTokenCreation = false };
