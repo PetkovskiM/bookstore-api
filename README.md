@@ -1,10 +1,13 @@
 # Bookstore API
 
+[![Build and tests](https://github.com/PetkovskiM/bookstore-api/actions/workflows/build-and-tests.yml/badge.svg?branch=main)](https://github.com/PetkovskiM/bookstore-api/actions/workflows/build-and-tests.yml)
+
 An ASP.NET Core bookstore API. The solution setup, Book/Author contracts and
 validation, unit tests, EF Core SQL Server persistence, book CRUD, paginated search,
 and a local OAuth authorization server with API scope enforcement and Swagger are implemented.
 Run the applications locally/with Visual Studio against containerized SQL Server,
-or use the complete Docker Compose demonstration. CI is a later checkpoint.
+or use the complete Docker Compose demonstration. GitHub Actions verifies the solution
+restore, Release build, and unit tests on pull requests and pushes to `main`.
 
 ## Solution
 
@@ -56,7 +59,23 @@ run these unit tests. The validation tests call MVC's object validator directly,
 including its validation of nested authors. JSON tests use the web serializer
 defaults. No HTTP server, database, or integration-test packages are involved.
 
-Verified for the Docker step with SDK `10.0.400`: package restore passed,
+## Continuous integration
+
+The **Build and tests** GitHub Actions workflow runs for pull requests targeting
+`main` and pushes to `main`. It uses the SDK selected by `global.json`, then runs:
+
+```powershell
+dotnet restore Bookstore.slnx
+dotnet build Bookstore.slnx --configuration Release --no-restore
+dotnet test tests/Bookstore.UnitTests/Bookstore.UnitTests.csproj --configuration Release --no-build --no-restore
+```
+
+It runs only the existing unit-test project, so it does not require SQL Server,
+User Secrets, `.env`, authentication credentials, generated certificates, or Docker.
+The first hosted workflow result will be available after this branch is pushed and
+the pull request or `main` push triggers the workflow.
+
+Verified locally for this CI step with SDK `10.0.400`: package restore passed,
 build passed with zero warnings/errors, and all 140 unit-test cases passed.
 See the [API security/Swagger guide](docs/api-security-swagger.md) and
 [OAuth server guide](docs/oauth-server.md#verification) for live checks.
@@ -509,8 +528,8 @@ Both real OAuth flows and their verification are documented in the Auth guide.
 Token lifetime, audience, client IDs, implicit consent, and the development
 callback are our implementation choices, not extra assignment requirements.
 The required implicit flow is implemented explicitly; Authorization Code with
-PKCE is a production recommendation. API enforcement, Swagger, and the Docker
-demonstration are implemented; CI and final delivery checks remain.
+PKCE is a production recommendation. API enforcement, Swagger, Docker
+demonstration, and CI are implemented; final delivery checks remain.
 
 ### Current implementation
 
