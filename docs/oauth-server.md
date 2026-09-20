@@ -3,8 +3,8 @@
 `Bookstore.Auth` uses OpenIddict 7.7.1 and ASP.NET Core Identity on .NET 10.
 It issues tokens that the API validates, with separate scopes for CRUD and search.
 See the [API security/Swagger guide](api-security-swagger.md) for the demonstration.
-The applications run locally against the existing SQL Server container. Full
-application containers are a later checkpoint.
+The applications can run locally against the existing SQL Server container or
+through the [full Docker demonstration](docker-demo.md).
 
 ## Clients, user, and endpoints
 
@@ -188,8 +188,8 @@ signing certificates or requiring demo credentials. The Production host refuses
 missing, expired, or keyless certificate configuration; it never chooses
 development signing credentials automatically. See OpenIddict's
 [certificate guidance](https://documentation.openiddict.com/configuration/encryption-and-signing-credentials.html).
-Full Docker hostnames, certificates, issuer forwarding, and deployment provisioning
-remain part of the later Docker/final-verification checkpoints.
+The [Docker guide](docker-demo.md) documents the supported container run mode,
+certificate preparation, discovery routing and production boundary.
 
 ## Verification
 
@@ -219,6 +219,6 @@ records and existing Bookstore data remained unchanged.
 
 These checks describe the OAuth server checkpoint. Subsequent API token enforcement,
 cross-scope 401/403 checks and Swagger's callback are documented in the
-[API security guide](api-security-swagger.md#verification). Visual Studio UI startup
-and full application containers remain unverified. No integration-test project or
-package was added to the solution.
+[API security guide](api-security-swagger.md#verification). Container checks are
+recorded separately in the [Docker guide](docker-demo.md#verification). Visual Studio
+UI startup remains unverified. No integration-test project or package was added.

@@ -149,10 +149,11 @@ and [Auth signing/client provisioning](oauth-server.md#controlled-production-set
 steps. JWT validation uses cached discovery keys and does not query the Auth
 database on every request; immediate token revocation is not implemented.
 
-The supported run mode for this checkpoint is local applications with containerized
-SQL Server. Full application Compose, issuer/hostname/proxy configuration, and
-certificate mounts belong to `feat/docker-demo`. CI and integration tests remain
-outside this branch.
+Both local applications with containerized SQL Server and the
+[full Docker demonstration](docker-demo.md) use these URLs and OAuth clients.
+The Docker guide covers certificate mounts, discovery routing, health and storage.
+Obtain fresh tokens after switching between run modes. CI and integration tests
+remain separate checkpoints.
 
 ## Verification
 
@@ -193,6 +194,6 @@ and removed only the temporary book database, leaving Docker volumes intact.
 Wrong issuer/audience, expired/not-yet-valid tokens, missing expiry, and unsupported
 token types/algorithms were checked by the cryptographic unit tests; live API
 checks used genuine issued tokens and malformed/tampered tokens. Visual Studio's
-startup UI and full application containers have not been exercised. SQL Server
+startup UI was not exercised; later container checks are in the Docker guide. SQL Server
 container-restart persistence was verified in the earlier persistence checkpoint,
 not repeated here. No integration-test project or packages were added.
