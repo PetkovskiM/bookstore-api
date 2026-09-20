@@ -1,0 +1,18 @@
+# Only build inputs enter the context. Local assignment files and credentials stay out.
+**
+!global.json
+!src/
+!src/**
+**/bin/**
+**/obj/**
+**/appsettings.Local.json
+**/appsettings.*.Local.json
+**/secrets.json
+**/.env
+**/.env.*
+**/AGENTS.md
+**/assignment.pdf
+**/*.pfx
+**/*.p12
+**/*.pem
+**/*.key

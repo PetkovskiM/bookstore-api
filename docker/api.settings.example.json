@@ -1,0 +1,5 @@
+{
+  "ConnectionStrings:Bookstore": "Server=sqlserver,1433;Database=Bookstore;User Id=sa;Password=<same-password-as-local-SQL>;Encrypt=True;TrustServerCertificate=True",
+  "Kestrel:Certificates:Default:Path": "/https/localhost.pfx",
+  "Kestrel:Certificates:Default:Password": "<HTTPS-PFX-password>"
+}

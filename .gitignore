@@ -433,6 +433,7 @@ FodyWeavers.xsd
 .nuget/
 
 # Local configuration and secrets (track only placeholder examples)
+.local/
 .env
 .env.*
 !.env.example

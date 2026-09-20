@@ -1,0 +1,14 @@
+{
+  "ConnectionStrings:Authentication": "Server=sqlserver,1433;Database=BookstoreAuth;User Id=sa;Password=<same-password-as-local-SQL>;Encrypt=True;TrustServerCertificate=True",
+  "Auth:Issuer": "https://localhost:7200/",
+  "Auth:BrowserRedirectUris:0": "https://localhost:7200/demo/callback",
+  "Auth:BrowserRedirectUris:1": "https://localhost:7100/swagger/oauth2-redirect.html",
+  "DevelopmentDemo:ManagementClientSecret": "<existing-management-secret>",
+  "DevelopmentDemo:UserPassword": "<existing-demo-password>",
+  "Kestrel:Certificates:Default:Path": "/https/localhost.pfx",
+  "Kestrel:Certificates:Default:Password": "<HTTPS-PFX-password>",
+  "Certificates:Signing:Path": "/oauth/signing.pfx",
+  "Certificates:Signing:Password": "<signing-PFX-password>",
+  "Certificates:Encryption:Path": "/oauth/encryption.pfx",
+  "Certificates:Encryption:Password": "<encryption-PFX-password>"
+}

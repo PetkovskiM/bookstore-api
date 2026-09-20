@@ -3,8 +3,8 @@
 An ASP.NET Core bookstore API. The solution setup, Book/Author contracts and
 validation, unit tests, EF Core SQL Server persistence, book CRUD, paginated search,
 and a local OAuth authorization server with API scope enforcement and Swagger are implemented.
-SQL Server runs in Docker; the applications still run locally or in Visual Studio.
-Application containers and CI are planned for later checkpoints.
+Run the applications locally/with Visual Studio against containerized SQL Server,
+or use the complete Docker Compose demonstration. CI is a later checkpoint.
 
 ## Solution
 
@@ -56,8 +56,8 @@ run these unit tests. The validation tests call MVC's object validator directly,
 including its validation of nested authors. JSON tests use the web serializer
 defaults. No HTTP server, database, or integration-test packages are involved.
 
-Verified for the API security step with SDK `10.0.400`: package restore passed,
-build passed with zero warnings/errors, and all 131 unit-test cases passed.
+Verified for the Docker step with SDK `10.0.400`: package restore passed,
+build passed with zero warnings/errors, and all 140 unit-test cases passed.
 See the [API security/Swagger guide](docs/api-security-swagger.md) and
 [OAuth server guide](docs/oauth-server.md#verification) for live checks.
 Database checks are recorded below; the unit tests themselves use no database.
@@ -82,6 +82,20 @@ In Visual Studio, configure both projects as startup projects with their `https`
 Trust the local development certificate with `dotnet dev-certs https --trust`.
 Both applications require HTTPS and reject plaintext HTTP instead of redirecting
 requests containing credentials. Visual Studio UI startup remains unverified.
+
+For the full container run mode, see the [Docker demonstration guide](docs/docker-demo.md).
+After the existing user-secrets setup and certificate trust, the Windows helper
+prepares ignored runtime files:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/Initialize-DockerDemo.ps1
+docker compose --profile demo up -d --build --wait
+```
+
+Stop local API/Auth processes first. Docker uses the same HTTPS URLs and databases.
+The `demo` profile leaves the SQL-only Visual Studio workflow available. Images
+contain no private certificates or populated local settings, and both applications
+run as non-root users. `/health` is anonymous and checks database connectivity.
 
 ## Book CRUD
 
@@ -430,10 +444,10 @@ Checked locally on Windows against the Compose SQL Server container:
   SQL script. The production script was generated, not deployed to a production
   environment.
 
-API HTTPS and scope enforcement were outside that persistence checkpoint; current
-checks are in the security guide. Visual Studio UI startup and full application
-containers remain unverified. No integration-test project or database-test package
-was introduced.
+Those checks describe the persistence checkpoint. Subsequent API security and
+container checks are in the [security](docs/api-security-swagger.md#verification)
+and [Docker](docs/docker-demo.md#verification) guides. Visual Studio UI startup
+remains unverified. No integration-test project or database-test package was introduced.
 
 ## Contract
 
@@ -495,8 +509,8 @@ Both real OAuth flows and their verification are documented in the Auth guide.
 Token lifetime, audience, client IDs, implicit consent, and the development
 callback are our implementation choices, not extra assignment requirements.
 The required implicit flow is implemented explicitly; Authorization Code with
-PKCE is a production recommendation. API enforcement and Swagger are implemented;
-application containers follow in the next checkpoint.
+PKCE is a production recommendation. API enforcement, Swagger, and the Docker
+demonstration are implemented; CI and final delivery checks remain.
 
 ### Current implementation
 

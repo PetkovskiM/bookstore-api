@@ -1,6 +1,8 @@
 using Bookstore.Auth.Authentication;
 using Bookstore.Auth.Data;
 using Bookstore.Auth.Errors;
+using Bookstore.Auth.Health;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
@@ -13,6 +15,13 @@ if (!AuthSettings.IsHttpsAddress(settings.Issuer))
     throw new InvalidOperationException("Configure Auth:Issuer as an absolute HTTPS address. See README.md.");
 }
 var formActionSources = settings.GetFormActionSources();
+if (builder.Configuration["DataProtection:KeysPath"] is { Length: > 0 } keysPath)
+{
+    builder.Services.AddDataProtection()
+        .SetApplicationName("Bookstore.Auth")
+        .PersistKeysToFileSystem(new DirectoryInfo(keysPath))
+        .ProtectKeysWithCertificate(AuthCertificates.Load("Encryption", builder.Environment, builder.Configuration));
+}
 
 // OpenIddict information/debug messages can contain protocol requests and token responses.
 builder.Logging.AddFilter("OpenIddict", LogLevel.Warning);
@@ -52,6 +61,7 @@ builder.Services.ConfigureApplicationCookie(options =>
 });
 builder.Services.AddAntiforgery(options => options.Cookie.SecurePolicy = CookieSecurePolicy.Always);
 builder.Services.AddAuthorization();
+builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database", timeout: TimeSpan.FromSeconds(5));
 builder.Services.AddOpenIddict()
     .AddCore(options => options.UseEntityFrameworkCore().UseDbContext<AuthDbContext>())
     .AddServer(options =>
@@ -119,4 +129,5 @@ app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHealthChecks("/health").AllowAnonymous();
 app.Run();

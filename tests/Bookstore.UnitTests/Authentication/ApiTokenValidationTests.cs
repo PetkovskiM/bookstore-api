@@ -10,6 +10,41 @@ namespace Bookstore.UnitTests.Authentication;
 
 public sealed class ApiTokenValidationTests
 {
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("auth", true)]
+    [InlineData("auth.internal", true)]
+    [InlineData("127.0.0.1", true)]
+    [InlineData("", false)]
+    [InlineData("https://auth:7200/", false)]
+    [InlineData("auth/path", false)]
+    [InlineData("auth:7200", false)]
+    public void BackchannelAcceptsOnlyAnOptionalHostName(string? host, bool valid)
+    {
+        Assert.Equal(valid, new JwtSettings
+        {
+            Authority = "https://localhost:7200/", BackchannelHost = host
+        }.IsValid());
+    }
+
+    [Fact]
+    public void ContainerDiscoveryRoutingPreservesPublicAuthorityAndTlsValidation()
+    {
+        var options = new JwtBearerOptions();
+        new ConfigureJwtBearerOptions(Options.Create(new JwtSettings
+        {
+            Authority = "https://localhost:7200/", BackchannelHost = "auth"
+        })).Configure(options);
+
+        using var handler = Assert.IsType<SocketsHttpHandler>(options.BackchannelHttpHandler);
+        Assert.Equal("https://localhost:7200/", options.Authority);
+        Assert.Equal(options.Authority, options.TokenValidationParameters.ValidIssuer);
+        Assert.True(options.RequireHttpsMetadata);
+        Assert.Null(handler.SslOptions.RemoteCertificateValidationCallback);
+        Assert.NotNull(handler.ConnectCallback);
+        Assert.False(handler.AllowAutoRedirect);
+    }
+
     // These tokens exercise validation rules only. Real OAuth issuance is verified separately.
     [Theory]
     [InlineData("valid", true)]

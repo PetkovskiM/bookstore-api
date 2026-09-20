@@ -1,5 +1,6 @@
 using Bookstore.Api.Data;
 using Bookstore.Api.Errors;
+using Bookstore.Api.Health;
 using Bookstore.Api.OpenApi;
 using Bookstore.Api.Security;
 using Bookstore.Api.Services;
@@ -15,12 +16,13 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Logging.AddFilter("Microsoft.AspNetCore.Authentication", LogLevel.Warning);
 builder.Services.AddOptions<JwtSettings>()
     .BindConfiguration("Authentication")
-    .Validate(settings => settings.IsValid(), "Configure an HTTPS Authentication:Authority and nonblank Authentication:Audience. See README.md.")
+    .Validate(settings => settings.IsValid(), "Configure an HTTPS Authentication:Authority, nonblank Authentication:Audience, and a valid optional Authentication:BackchannelHost. See README.md.")
     .ValidateOnStart();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
 builder.Services.AddSingleton<IConfigureOptions<JwtBearerOptions>, ConfigureJwtBearerOptions>();
 builder.Services.AddBookAuthorization();
 builder.Services.AddControllers();
+builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database", timeout: TimeSpan.FromSeconds(5));
 if (builder.Environment.IsDevelopment())
 {
     builder.Services.AddSwaggerGen();
@@ -103,5 +105,6 @@ if (app.Environment.IsDevelopment())
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHealthChecks("/health").AllowAnonymous();
 
 app.Run();

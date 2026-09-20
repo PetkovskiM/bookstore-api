@@ -22,5 +22,85 @@ services:
       retries: 12
       start_period: 30s
 
+  auth:
+    profiles: [demo]
+    build:
+      context: .
+      dockerfile: src/Bookstore.Auth/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: https://+:7200
+      DataProtection__KeysPath: /data-protection-keys
+    ports:
+      - "127.0.0.1:7200:7200"
+    volumes:
+      - type: bind
+        source: ./.local/docker/auth.json
+        target: /app/appsettings.Development.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.local/docker/https
+        target: /https
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.local/docker/oauth
+        target: /oauth
+        read_only: true
+        bind:
+          create_host_path: false
+      - auth-data-protection:/data-protection-keys
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, --show-error, --cacert, /https/localhost.crt, https://localhost:7200/health]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+
+  api:
+    profiles: [demo]
+    build:
+      context: .
+      dockerfile: src/Bookstore.Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: https://+:7100
+      Authentication__Authority: https://localhost:7200/
+      Authentication__BackchannelHost: auth
+      SSL_CERT_FILE: /https/localhost.crt
+    ports:
+      - "127.0.0.1:7100:7100"
+    volumes:
+      - type: bind
+        source: ./.local/docker/api.json
+        target: /app/appsettings.Development.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.local/docker/https
+        target: /https
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, --show-error, --cacert, /https/localhost.crt, https://localhost:7100/health]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+
 volumes:
   sqlserver-data:
+  auth-data-protection:
