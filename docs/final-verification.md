@@ -14,7 +14,8 @@ SDK `10.0.400`, User Secrets, and `dotnet dev-certs`, so it did not meet the int
 minimum Docker-only reviewer path. The initializer and documentation now remove those
 host dependencies. Its complete first-run and repeat paths passed in an isolated
 Windows PowerShell 5.1 layout, including real temporary certificate generation and
-SQL connection parsing. A physical fresh Docker clean-laptop retest is still required.
+SQL connection parsing. A fresh Windows 10 laptop subsequently completed Docker
+initialization, image build, and startup without a compatible local .NET SDK.
 
 ## Requirement checklist
 
@@ -28,13 +29,13 @@ SQL connection parsing. A physical fresh Docker clean-laptop retest is still req
 | OAuth restrictions and browser safety | Pass | Invalid management credentials, disallowed grants/scopes, browser token-endpoint use and unregistered callbacks rejected. Real popup callback, secure/HttpOnly/SameSite cookie, logout antiforgery, logout, standalone callback fragment cleanup and no browser token persistence checked. |
 | Swagger/demo client | Pass | Both schemes and all five operations present. Actual search and management **Try it out** worked in headless Edge with normal HTTPS trust. Reload cleared Swagger authorization; no external validator requests occurred. |
 | SQL persistence and existing migrations | Pass | Both migration-history entries present; both IDs are SQL identity columns. No pending EF model changes; both idempotent Production scripts generated in memory. Full catalog/user/client/migration snapshots survived normal SQL restart, compared before application startup. |
-| Development seeding | Pass / Manual | Source gates seeding to Development; migrations contain no demo inserts. Repeated real startup preserved existing rows and user/client credentials. Fresh-database bootstrap was verified in earlier checkpoints; rerunning it on the second laptop remains manual. No existing database was reset here. |
-| Full Docker demo | Pass / Manual | Earlier `up -d --build --wait` checks built both images and started SQL/Auth/API; health, issuer routing, both flows, persistence and retained keys/cookies were checked. The new SDK-free initializer's first-run/repeat paths passed in isolated Windows PowerShell 5.1; a physical fresh Docker clean-laptop run is still required. |
+| Development seeding | Pass | Source gates seeding to Development; migrations contain no demo inserts. Repeated real startup preserved existing rows and user/client credentials. Fresh Docker initialization/build/startup was also verified on Windows 10 without a compatible local SDK. No existing database was reset here. |
+| Full Docker demo | Pass | `up -d --build --wait` built and started SQL/Auth/API. Health, issuer routing, both flows, persistence, retained keys/cookies, and fresh Windows 10 initialization/build/startup without a compatible local SDK were verified. |
 | CI restore/Release build/unit tests | Pass | Workflow path and badge match; SDK comes from `global.json`, triggers target `main`, no runtime services/secrets required. All equivalent local commands passed. Hosted PR and post-merge runs/green badge were confirmed by the developer; no GitHub setting was changed. |
 | Tracked secrets and generated files | Pass | Tracked-file inventory and content scan found no local credentials, private-key/JWT patterns, certificates, `.env`, runtime directories or build artifacts. Placeholder examples are intentional. This is a current-tree/known-value check, not a comprehensive scan of all historical commits. |
 | Production migration/seeding/certificate boundary | Pass | Source review: migration/seed hooks and demo UI are Development-only. In Production, Auth failed without an explicit signing certificate; API failed without an explicit HTTPS authority. EF generated schema-only SQL without a live database or signing credentials. |
-| Production deployment | Manual | Deployment secrets, restricted database identities, real users/clients, HTTPS names, certificates, persistent encrypted Data Protection keys, backups/rotation and any reverse proxy need provisioning and end-to-end testing. See the [Production checklist](delivery-guide.md#production-checklist). This is not a tested production installation. |
-| Docker clean laptop / optional Visual Studio | Manual | The first Docker clean-laptop attempt exposed the former host SDK/User Secrets/development-certificate dependency. Retest the revised Docker-only checklist; optional Visual Studio UI startup/debugging remains separate and untested. |
+| Production deployment | Manual | Deployment secrets, restricted database identities, real users/clients, HTTPS names, certificates, persistent encrypted Data Protection keys, backups/rotation and any reverse proxy need provisioning and end-to-end testing. See the README's [production limitations](../README.md#production-limitations). This is not a tested production installation. |
+| Docker clean laptop / optional Visual Studio | Pass / Manual | Fresh Windows 10 Docker initialization, image build, and startup passed without a compatible local SDK. Optional Visual Studio UI startup/debugging remains separate and untested. |
 
 ## Commands and results
 
@@ -73,8 +74,8 @@ password. `config --quiet` performs the requested validation without disclosing 
 
 The following additional commands were executed for this review. The `.artifacts`
 helpers are local verification tools, excluded from Git; they are not required
-to build, run, or review a clean clone. Their checks are described here and in the
-delivery guide, not dependent on distributing another machine's local files.
+to build, run, or review a clean clone. Their checks are described here without
+depending on another machine's local files.
 
 | Command or inspection | Result |
 | --- | --- |
@@ -115,27 +116,6 @@ a transient database-login failure; cleanup succeeded and the repeated check
 passed after a bounded recovery wait. Neither required application/runtime changes.
 The interrupted approval did not start the live workflow.
 
-## Changed files
-
-| File | Reason |
-| --- | --- |
-| `README.md` | Add the concise recommended Docker quick start and move SDK/Visual Studio/User Secrets material under the optional local path. |
-| `docs/delivery-guide.md` | New architecture overview, Docker-only clean-laptop checklist, tested token/401/403 presentation sequence, and Production provisioning/proxy guidance. |
-| `docs/final-verification.md` | New requirement checklist, command/results record, preservation evidence, limitations, and the required Docker clean-laptop retest status. |
-| `docs/implementation-plan.md` | Mark CI merged with confirmed hosted results and record the SDK-free Docker retest as the remaining delivery check. |
-| `docs/api-security-swagger.md` | Make Docker the primary Swagger flow and have its management-token command read ignored Docker `auth.json`. |
-| `docs/docker-demo.md` | Remove host-SDK/User Secrets/development-certificate prerequisites; document generated runtime material, preservation, trust, and mode boundaries. |
-| `docs/oauth-server.md` | Distinguish Docker credential storage from the optional local User Secrets path and retain Data Protection/rotation guidance. |
-| `scripts/Initialize-DockerDemo.ps1` | Replace the User Secrets/`dotnet dev-certs` dependency with first-run ignored Docker configuration/certificate generation, repeat-run validation/preservation, optional current-user HTTPS trust, no secret output, and Windows PowerShell-safe SQL connection-string indexers. |
-| `tests/Bookstore.UnitTests/Authentication/ApiTokenValidationTests.cs` | Formatter-only line breaks in three object initializers. |
-| `tests/Bookstore.UnitTests/Authentication/SwaggerContractTests.cs` | Formatter-only indentation of a nested loop. |
-
-Three new local-only helpers were also created:
-`.artifacts/final-verification.cjs`, `.artifacts/final-production-check.cjs`, and
-`.artifacts/final-docs-check.cjs`. They contain verification code, not credentials
-or generated runtime configuration, and remain excluded from Git. Normal build
-outputs remain ignored as well.
-
 ## Preservation and limits
 
 All pre-existing authors/books, user credentials, client registrations and migration
@@ -154,11 +134,9 @@ certificates, secrets or seed data changed. The Docker initialization script and
 documentation changed; the only C# edits are whitespace in two existing test files.
 No integration-test project, package, framework or abstraction was introduced.
 
-Ready for Docker clean-machine verification: **yes, as a retest candidate**. Follow
-the [Docker-only checklist and demo sequence](delivery-guide.md) and record the
-results. A successful first-run fresh-laptop result is still required before it can
-be reported as passed. Optional Visual Studio startup/debugging, browser interaction
-by a reviewer, non-Windows preparation, and a real Production deployment remain
-manual. Historical local CLI/OAuth checks are in the
+Fresh Windows 10 Docker clean-machine verification: **passed**. The README now
+contains the self-contained startup and demonstration path. Optional Visual Studio
+startup/debugging, browser interaction by another reviewer, non-Windows preparation,
+and a real Production deployment remain manual. Historical local CLI/OAuth checks are in the
 [security](api-security-swagger.md#verification) and [Auth](oauth-server.md#verification)
 guides; this final live run exercised the full Docker mode.

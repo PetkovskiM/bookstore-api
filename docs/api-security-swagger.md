@@ -6,13 +6,13 @@ apply to the server endpoints, including requests made outside Swagger.
 
 ## Docker demonstration (recommended)
 
-Use the [Docker quick start](../README.md#docker-quick-start-recommended). It needs
+Use the [Docker demonstration](../README.md#docker-demonstration). It needs
 no host SDK, Visual Studio, User Secrets, or `dotnet dev-certs`. When all three
 containers are healthy, open `https://localhost:7100/swagger`.
 
 ## Optional local / Visual Studio demonstration
 
-Complete the [optional local database setup](../README.md#optional-local-database-setup)
+Complete the [optional local development setup](../README.md#optional-local--visual-studio-development)
 and [optional Auth User Secrets setup](oauth-server.md#optional-local--visual-studio-development)
 first. Preserve existing `.env` and User Secrets values. From the repository root:
 
@@ -69,7 +69,7 @@ For optional local/Visual Studio hosting only, replace the first line with:
 $authSettings = Get-Content -LiteralPath (Join-Path $env:APPDATA 'Microsoft\UserSecrets\bookstore-auth-development\secrets.json') -Raw | ConvertFrom-Json
 ```
 
-Use `$managementHeaders` with the [PowerShell CRUD walkthrough](../README.md#try-the-endpoints-from-powershell).
+Use `$managementHeaders` with the [README CRUD walkthrough](../README.md#managementtoken-crud).
 For Swagger, copy just the token locally with
 `$managementToken.access_token | Set-Clipboard`, open **Authorize**, paste into
 **ManagementToken**, and click its **Authorize** button. Do not include the
@@ -158,9 +158,8 @@ issuer, including its trailing slash), and `Authentication__Audience` to
 `bookstore-api`. Missing/invalid settings fail startup. The issuer's TLS certificate
 must be trusted by the API host; HTTPS metadata validation is never disabled.
 
-Production has no Swagger, automatic migrations or sample seeding. Keep the
-[controlled database provisioning](../README.md#controlled-production-provisioning)
-and [Auth signing/client provisioning](oauth-server.md#controlled-production-setup)
+Production has no Swagger, automatic migrations or sample seeding. Keep the README's
+[production limitations](../README.md#production-limitations) and [Auth signing/client provisioning](oauth-server.md#controlled-production-setup)
 steps. JWT validation uses cached discovery keys and does not query the Auth
 database on every request; immediate token revocation is not implemented.
 
@@ -168,10 +167,10 @@ Both local applications with containerized SQL Server and the
 [full Docker demonstration](docker-demo.md) use these URLs and OAuth clients.
 The Docker guide covers certificate mounts, discovery routing, health and storage.
 Obtain fresh tokens after switching between run modes. The
-[CI workflow](../README.md#continuous-integration) runs unit tests; it does not
+[CI workflow](../.github/workflows/build-and-tests.yml) runs unit tests; it does not
 issue real OAuth tokens. See the [final verification record](final-verification.md)
-and [presentation sequence](delivery-guide.md#presentation-sequence) for current
-results and the reviewer walkthrough. No integration-test project is required.
+and the [README walkthrough](../README.md#oauth-and-swagger-walkthrough) for current
+results and the reviewer flow. No integration-test project is required.
 
 ## Verification
 

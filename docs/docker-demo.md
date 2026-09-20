@@ -175,15 +175,14 @@ logins. Provision clients/users deliberately and apply reviewed migrations befor
 startup. Production performs no automatic migration/demo seeding and exposes no
 Swagger or standalone demo page.
 
-Follow [database provisioning](../README.md#controlled-production-provisioning) and
+Follow the README's [production limitations](../README.md#production-limitations) and
 [Auth provisioning](oauth-server.md#controlled-production-setup). Set the exact
 public issuer and callback URLs, configure API trust/authority, retain encrypted
 Data Protection keys, and plan certificate/key rotation and backups. The local
 `sa` login, self-signed HTTPS certificates and `TrustServerCertificate=True` SQL
 setting are demonstration choices. A real production deployment is not verified
-by this checkpoint. The [delivery guide](delivery-guide.md#production-checklist)
-lists exact required settings, Data Protection storage, and the additional work
-needed if deploying behind an HTTPS-terminating reverse proxy.
+by this checkpoint. See the README's [production limitations](../README.md#production-limitations)
+for the deployment boundary, Data Protection storage, and HTTPS reverse-proxy work.
 
 ## Verification
 
@@ -221,5 +220,7 @@ checks may advance Identity concurrency metadata without changing credentials.
 These are the historical Docker-checkpoint results. The
 [final verification record](final-verification.md) documents the later checks
 against the existing local runtime without replacing settings, credentials, keys,
-or volumes. Visual Studio's startup UI, a second laptop, a non-Windows preparation
-workflow, and a deployed production environment have not been exercised.
+or volumes. A fresh Windows 10 Docker initialization/build/startup was subsequently
+verified without a compatible local .NET SDK. Visual Studio's startup UI, a
+non-Windows preparation workflow, and a deployed production environment have not
+been exercised.

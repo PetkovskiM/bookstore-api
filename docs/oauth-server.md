@@ -3,7 +3,7 @@
 `Bookstore.Auth` uses OpenIddict 7.7.1 and ASP.NET Core Identity on .NET 10.
 It issues tokens that the API validates, with separate scopes for CRUD and search.
 See the [API security/Swagger guide](api-security-swagger.md) for the demonstration.
-The recommended [Docker quick start](../README.md#docker-quick-start-recommended)
+The recommended [Docker demonstration](../README.md#docker-demonstration)
 runs without a host SDK, Visual Studio, User Secrets, or `dotnet dev-certs`.
 Optional local development runs the applications against the existing SQL Server
 container instead.
@@ -36,7 +36,7 @@ an HTTP listener is explicitly configured, the application rejects HTTP requests
 ## Optional local / Visual Studio development
 
 This section is not needed for the recommended Docker quick start. First complete
-the [optional SQL Server/API configuration](../README.md#optional-local-database-setup).
+the [optional local development configuration](../README.md#optional-local--visual-studio-development).
 Then, from the repository root:
 
 ```powershell
@@ -188,10 +188,10 @@ Production startup performs no migrations or demo seeding. Before deployment:
 5. Set `DataProtection__KeysPath` to a persistent directory writable by the Auth
    process. The existing configuration sets application name `Bookstore.Auth`
    and encrypts the key ring with the configured encryption certificate. Back up
-   that certificate and its password together with the key ring, and retain old
-   decryption material during a planned rotation. See the
-   [Production checklist](delivery-guide.md#production-checklist) for deployment
-   boundaries and reverse-proxy requirements.
+    that certificate and its password together with the key ring, and retain old
+    decryption material during a planned rotation. See the README's
+    [production limitations](../README.md#production-limitations) for deployment
+    boundaries and reverse-proxy requirements.
 
 ```powershell
 dotnet tool restore
