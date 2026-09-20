@@ -7,27 +7,28 @@ not a production deployment configuration.
 
 ## Prepare once on Windows
 
-Use Docker Desktop with Linux containers. Complete the
-[SQL/API user-secrets setup](../README.md#local-setup) and
-[Auth setup](oauth-server.md#windows-and-visual-studio-setup) first. The same
-credentials and databases are used in both run modes. From the repository root:
+This recommended Docker path needs only Git, Docker Desktop with Linux containers,
+and Windows PowerShell. It does not use a host .NET SDK, Visual Studio, User Secrets,
+or `dotnet dev-certs`. Start Docker Desktop, then run this as the normal Windows user:
 
 ```powershell
-dotnet dev-certs https --trust
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/Initialize-DockerDemo.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/Initialize-DockerDemo.ps1 -TrustHttpsCertificate
 ```
 
-Run these as your normal Windows user. Certificate trust may require Windows
-confirmation. The helper reads the existing API/Auth user secrets, changes only
-the copied SQL server address to `sqlserver,1433`, and creates ignored runtime
-files under `.local/docker`. It exports the existing trusted localhost HTTPS
-certificate and generates separate signing/encryption certificates for the Docker
-demo. PFX files have random passwords; no passwords are printed.
+On a fresh clone, the helper creates the ignored `.env` with only
+`MSSQL_SA_PASSWORD` and `MSSQL_PORT`, plus `.local/docker` settings, a localhost
+HTTPS PFX/public certificate, and separate OAuth signing/encryption PFX files. It
+generates all passwords and secrets randomly and never prints them. The explicit
+switch trusts the generated public localhost certificate in the current user's
+Windows trust store; omit it only if browser certificate warnings are acceptable.
 
-Repeated preparation preserves existing settings, PFX passwords and OAuth keys.
-It changes neither `.env`, user secrets, nor database records. Demo credentials
-must continue to match the already-seeded Auth database. Editing a seed setting
-does not reset existing passwords or client registrations.
+On a repeat run, the helper validates and preserves a complete matching `.env` and
+`.local/docker` configuration. It never rotates credentials or keys. A missing,
+placeholder, partial, or mismatched file produces a short error instead; restore
+the matching ignored files before continuing. If existing Docker demo volumes are
+found without their matching runtime files, it also stops rather than generating a
+new SQL password. It does not read or change User Secrets, database records,
+containers, or volumes.
 
 | Runtime file | Purpose |
 | --- | --- |
@@ -67,13 +68,15 @@ The browser URLs are unchanged:
 - Readiness: `https://localhost:7100/health` and `https://localhost:7200/health`
 
 Follow the [Swagger and management-token demonstration](api-security-swagger.md).
-Its PowerShell token command uses the same Auth user secrets. CRUD requires
-`books.manage`; search requires the real implicit flow and `books.search`.
+Its Docker PowerShell token command reads the ignored `auth.json` file, not User
+Secrets. CRUD requires `books.manage`; search requires the real implicit flow and
+`books.search`.
 Swagger uses the existing callback
 `https://localhost:7100/swagger/oauth2-redirect.html`; the standalone Auth demo
 still uses `https://localhost:7200/demo/callback`.
 
-To return to Visual Studio while keeping SQL running:
+To return to optional local/Visual Studio development while keeping SQL running,
+complete its User Secrets setup first:
 
 ```powershell
 docker compose --profile demo stop api auth
@@ -83,10 +86,12 @@ dotnet run --project src/Bookstore.Auth --launch-profile https
 dotnet run --project src/Bookstore.Api --launch-profile https
 ```
 
-Use one application run mode at a time. Obtain fresh tokens and sign in again
-after switching modes: the local Windows host and Docker have separate signing
-and cookie keys, although the issuer URL, user and clients are the same. The
-database records remain shared.
+Use one application run mode at a time. Obtain fresh tokens and sign in again after
+switching modes: the local Windows host and Docker have separate signing and cookie
+keys. The databases remain shared, so do not alternate modes after either has seeded
+Auth unless the retained local credentials/configuration match those existing records.
+The seed intentionally preserves established users and clients rather than rotating
+them.
 
 ## HTTPS and issuer decisions
 
@@ -107,16 +112,17 @@ See the [.NET connection callback](https://learn.microsoft.com/en-us/dotnet/api/
 
 `SSL_CERT_FILE` gives the API the exported public localhost certificate for trust;
 it does not disable HTTPS verification. Health checks use curl with `--cacert`,
-never `--insecure`. Browser/Windows trust comes from `dotnet dev-certs https --trust`.
-The backchannel override is absent in the normal Visual Studio configuration.
+never `--insecure`. Browser/Windows trust is optionally added by
+`-TrustHttpsCertificate`. The backchannel override is absent in the normal Visual
+Studio configuration.
 The fixed application ports are intentional: changing them also requires updating
 issuer, callback registration, listener, health-check and routing configuration.
 
-Auth accepts explicitly configured signing/encryption PFX files in Development
-for Docker. It still uses its existing Windows development certificates locally
+Auth accepts explicitly configured signing/encryption PFX files in Development for
+Docker. Optional local development uses its existing Windows development certificates
 when neither file is configured. Partial explicit configuration fails; Production
-always requires explicit credentials and never falls back to development keys.
-HTTPS and OAuth signing certificates serve different purposes and are kept separate.
+always requires explicit credentials and never falls back to development keys. HTTPS
+and OAuth signing certificates serve different purposes and are kept separate.
 
 ## Persistence, health and secrets
 
@@ -142,7 +148,10 @@ docker compose --profile demo up -d --no-deps --force-recreate --wait auth api
 
 To inspect storage after a SQL restart without allowing startup seeding to obscure
 the result, stop the two apps, restart SQL, query the existing rows, then start the
-apps again. Do not remove volumes or use `docker compose down -v`.
+apps again. SQL's `SELECT 1` health check can succeed while a user database is still
+recovering; allow a short bounded wait for both databases to be accessible before
+comparing their rows. The applications also use SQL connection retries and their
+own database health checks. Do not remove volumes or use `docker compose down -v`.
 
 Compose mounts generated JSON files over each image's Development settings file.
 Secrets are not build arguments or image layers; the Docker build context allows
@@ -151,16 +160,11 @@ files. Avoid printing `docker compose config` without `--quiet`: SQL's environme
 contains its local password. Do not share private runtime files or authentication
 headers. The API has no access to Auth's private signing/encryption certificates.
 
-For HTTPS renewal, first trust a valid development certificate, then run:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/Initialize-DockerDemo.ps1 -RefreshHttpsCertificate
-docker compose --profile demo up -d --no-deps --force-recreate --wait auth api
-```
-
-This refreshes only HTTPS material. The helper refuses to silently replace missing
-or expired OAuth keys; restore missing files from backup or perform deliberate key
-rotation. The generated OAuth demo certificates are valid for one year.
+If a generated certificate expires or is lost, the helper stops rather than replacing
+it. Restore the matching local runtime files or perform a deliberate, documented key
+rotation after preserving the existing data. `-TrustHttpsCertificate` only trusts the
+existing public localhost certificate; it does not generate or rotate certificates.
+The generated demo certificates are valid for two years.
 
 ## Production boundary
 
@@ -177,7 +181,9 @@ public issuer and callback URLs, configure API trust/authority, retain encrypted
 Data Protection keys, and plan certificate/key rotation and backups. The local
 `sa` login, self-signed HTTPS certificates and `TrustServerCertificate=True` SQL
 setting are demonstration choices. A real production deployment is not verified
-by this checkpoint.
+by this checkpoint. The [delivery guide](delivery-guide.md#production-checklist)
+lists exact required settings, Data Protection storage, and the additional work
+needed if deploying behind an HTTPS-terminating reverse proxy.
 
 ## Verification
 
@@ -201,9 +207,10 @@ Live checks used temporary book/Auth databases in the existing SQL Server contai
 - After stopping the apps and normally restarting SQL Server, all book/author
   rows, users, clients and migration records matched their snapshots **before**
   app startup. Starting the apps again preserved them too.
-- Repeat preparation preserved all settings, certificates, user-secrets files
-  and `.env`. Container logs contained no actual SQL/demo/PFX passwords,
-  management secret or JWT.
+- Earlier repeat preparation preserved its existing settings, certificates,
+  User Secrets and `.env`. The current initializer instead validates/preserves its
+  own ignored `.env` and `.local/docker` files without reading User Secrets.
+  Container logs contained no actual SQL/demo/PFX passwords, management secret or JWT.
 
 Both original databases remained unchanged during Docker verification. Only the
 owned temporary databases were removed; all named volumes were retained. The
@@ -211,6 +218,8 @@ local application workflow was also rerun after these changes: both OAuth flows,
 Swagger, scope checks and Production API protection still passed. Normal login
 checks may advance Identity concurrency metadata without changing credentials.
 
-Visual Studio's startup UI, a non-Windows preparation workflow, and a deployed
-production environment have not been exercised. No CI or integration-test project
-is added in this branch.
+These are the historical Docker-checkpoint results. The
+[final verification record](final-verification.md) documents the later checks
+against the existing local runtime without replacing settings, credentials, keys,
+or volumes. Visual Studio's startup UI, a second laptop, a non-Windows preparation
+workflow, and a deployed production environment have not been exercised.

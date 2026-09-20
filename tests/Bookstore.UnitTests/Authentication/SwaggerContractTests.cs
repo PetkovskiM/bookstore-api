@@ -33,19 +33,19 @@ public sealed class SwaggerContractTests
         var operationCount = 0;
 
         foreach (var path in root.GetProperty("paths").EnumerateObject())
-        foreach (var operation in path.Value.EnumerateObject())
-        {
-            operationCount++;
-            var requirement = Assert.Single(operation.Value.GetProperty("security").EnumerateArray());
-            var scheme = Assert.Single(requirement.EnumerateObject());
-            var search = path.Name.EndsWith("/search", StringComparison.Ordinal);
-            Assert.Equal(search ? "SearchOAuth" : "ManagementToken", scheme.Name);
-            Assert.Equal(search ? ["books.search"] : Array.Empty<string>(),
-                scheme.Value.EnumerateArray().Select(scope => scope.GetString()).ToArray());
-            foreach (var status in new[] { "401", "403" })
-                Assert.True(operation.Value.GetProperty("responses").GetProperty(status)
-                    .GetProperty("content").TryGetProperty("application/problem+json", out _));
-        }
+            foreach (var operation in path.Value.EnumerateObject())
+            {
+                operationCount++;
+                var requirement = Assert.Single(operation.Value.GetProperty("security").EnumerateArray());
+                var scheme = Assert.Single(requirement.EnumerateObject());
+                var search = path.Name.EndsWith("/search", StringComparison.Ordinal);
+                Assert.Equal(search ? "SearchOAuth" : "ManagementToken", scheme.Name);
+                Assert.Equal(search ? ["books.search"] : Array.Empty<string>(),
+                    scheme.Value.EnumerateArray().Select(scope => scope.GetString()).ToArray());
+                foreach (var status in new[] { "401", "403" })
+                    Assert.True(operation.Value.GetProperty("responses").GetProperty(status)
+                        .GetProperty("content").TryGetProperty("application/problem+json", out _));
+            }
         Assert.Equal(5, operationCount);
         var schemes = root.GetProperty("components").GetProperty("securitySchemes");
         Assert.Equal("https://issuer.example/connect/authorize", schemes.GetProperty("SearchOAuth")

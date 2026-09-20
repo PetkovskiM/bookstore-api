@@ -1,8 +1,8 @@
 # Implementation plan
 
-Plan for **10 working branches in total**, excluding `main`: the setup through
-Docker demonstration branches are merged, and CI is the current branch.
-The names below are suggestions except for the first three, which already exist.
+Plan for **10 working branches in total**, excluding `main`: setup through CI is
+merged, and `docs/final-verification` is the current branch. The developer confirmed
+both hosted CI runs passed after merging the CI checkpoint.
 The developer creates each branch from updated `main` after merging the previous
 PR and handles all staging, commits, pushes, and merges.
 
@@ -20,8 +20,8 @@ contract; it does not turn those choices into extra assignment requirements.
 | 6 | `feat/oauth-server` | Local OpenIddict server and minimal Identity login/logout, separate authentication database in the existing SQL Server container, migrations, and idempotent Development-only demo user/clients. Restrict grants/scopes; verify real client-credentials and implicit token issuance, HTTPS, discovery, and callbacks. |
 | 7 | `feat/api-security-swagger` | Validate issuer, audience, signature, and expiry; enforce `books.manage` on CRUD and `books.search` on search. Add configured Swagger, contract examples, and a management-token demonstration. Verify both real flows and 401/403 behavior, including tokens used for the wrong operation. |
 | 8 | `feat/docker-demo` | Containerize API/Auth and complete Compose with the existing SQL Server service and two databases. Document certificates, secrets, migrations, hostname/issuer configuration, and health checks. Verify CRUD/search, persistence, discovery, redirects, and both OAuth flows in the full Docker run mode. |
-| 9 | `ci/build-and-tests` | Current: GitHub Actions restores, builds in Release, and runs unit tests on pushes to and pull requests targeting `main`, with a workflow badge. It uses `global.json` and needs no SQL Server service. Check the hosted workflow result after the developer pushes. |
-| 10 | `docs/final-verification` | Verify a clean setup in Visual Studio and full Compose, production migration/provisioning instructions, absence of demo seeding/development signing credentials in Production, all required behavior, and presentation/demo instructions. Resolve remaining reproducibility issues before submission. |
+| 9 | `ci/build-and-tests` | Merged: GitHub Actions restores, builds in Release, and runs unit tests on pushes to and pull requests targeting `main`, with a workflow badge. It uses `global.json` and needs no SQL Server service. Both hosted runs passed, as confirmed by the developer. |
+| 10 | `docs/final-verification` | Current: local build/tests/format, requirement review, Docker/live OAuth and restart persistence checks, Production guidance, and delivery instructions. The Docker initializer now has an SDK-free reviewer path; its fresh clean-laptop retest remains manual. See the [verification record](final-verification.md) and [clean-machine/demo guide](delivery-guide.md). Optional Visual Studio UI remains a separate manual check. |
 
 Priority is a working, persistent book API, then the required OAuth behavior and
 demonstration client, then the complete Docker run mode and delivery checks.

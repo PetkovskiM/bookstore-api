@@ -3,14 +3,16 @@
 `Bookstore.Auth` uses OpenIddict 7.7.1 and ASP.NET Core Identity on .NET 10.
 It issues tokens that the API validates, with separate scopes for CRUD and search.
 See the [API security/Swagger guide](api-security-swagger.md) for the demonstration.
-The applications can run locally against the existing SQL Server container or
-through the [full Docker demonstration](docker-demo.md).
+The recommended [Docker quick start](../README.md#docker-quick-start-recommended)
+runs without a host SDK, Visual Studio, User Secrets, or `dotnet dev-certs`.
+Optional local development runs the applications against the existing SQL Server
+container instead.
 
 ## Clients, user, and endpoints
 
 | Application | Grant | Scope | Secret |
 | --- | --- | --- | --- |
-| `bookstore-management` | Client credentials | `books.manage` | Required; stored in Auth user secrets locally and hashed by OpenIddict in SQL. |
+| `bookstore-management` | Client credentials | `books.manage` | Required; stored in ignored Docker `auth.json` for the Docker demo or Auth User Secrets locally, then hashed by OpenIddict in SQL. |
 | `bookstore-browser` | Implicit (`response_type=token`) | `books.search` | None; this is a public client. |
 
 These are two applications. `demo@bookstore.local` is the single development
@@ -31,9 +33,10 @@ the Auth browser URLs; `127.0.0.1` is only the SQL connection address. Auth's so
 launch profile is `https`; it does not offer a plaintext HTTP login mode. Even if
 an HTTP listener is explicitly configured, the application rejects HTTP requests.
 
-## Windows and Visual Studio setup
+## Optional local / Visual Studio development
 
-First complete the [SQL Server/API configuration](../README.md#local-setup).
+This section is not needed for the recommended Docker quick start. First complete
+the [optional SQL Server/API configuration](../README.md#optional-local-database-setup).
 Then, from the repository root:
 
 ```powershell
@@ -76,8 +79,12 @@ OpenIddict tables. No Docker volume or existing book data is reset.
 
 ## Try both flows
 
-For client credentials, keep the response in memory instead of displaying the
-access token or placing a secret in command history:
+For the Docker client-credentials flow, use the [Docker management-token command]
+(api-security-swagger.md#management-token-and-crud). It reads the local ignored
+`.local/docker/auth.json`, not User Secrets, and keeps the access token in memory.
+
+For optional local/Visual Studio hosting, keep the response in memory instead of
+displaying the access token or placing a secret in command history:
 
 ```powershell
 $secretPath = Join-Path $env:APPDATA 'Microsoft\UserSecrets\bookstore-auth-development\secrets.json'
@@ -92,7 +99,9 @@ $token | Select-Object token_type, expires_in, scope
 ```
 
 For implicit, visit `https://localhost:7200/demo`, click **Continue to sign in**,
-and sign in as `demo@bookstore.local` using the password from Auth user secrets.
+and sign in as `demo@bookstore.local`. In Docker, use the deliberately copied
+password from `.local/docker/auth.json`; in optional local hosting, use the password
+from Auth User Secrets.
 The server returns an access token in the callback URL fragment. The page checks
 the one-time `state`, removes the fragment immediately, reports the outcome, and
 discards the token. It does not call the book API or persist tokens in browser
@@ -147,13 +156,14 @@ OpenIddict managers, rather than changing seed settings or deleting a database.
 The migration contains schema only. `dotnet ef database update` applies that
 schema; demo seeding happens on application startup, not inside the migration.
 
-Development signing and encryption certificates persist in the current user's
-certificate store and are separate from the HTTPS certificate. OpenIddict's
-protocol information/debug logs are suppressed because they can contain tokens
-or request values. Unexpected application errors use generic ProblemDetails and
-log only exception type and trace ID. Protocol rejections keep OpenIddict's OAuth
-error format (including plain text when an authorization request has no safe
-callback), rather than replacing it with application errors.
+Optional local development signing and encryption certificates persist in the
+current user's certificate store and are separate from the HTTPS certificate. Docker
+instead mounts generated ignored PFX files. OpenIddict's protocol information/debug
+logs are suppressed because they can contain tokens or request values. Unexpected
+application errors use generic ProblemDetails and log only exception type and trace
+ID. Protocol rejections keep OpenIddict's OAuth error format (including plain text
+when an authorization request has no safe callback), rather than replacing it with
+application errors.
 
 ## Controlled Production setup
 
@@ -175,6 +185,13 @@ Production startup performs no migrations or demo seeding. Before deployment:
    `Certificates__Encryption__Path`, and `Certificates__Encryption__Password`.
    Keep the files and passwords out of Git. Configure host HTTPS separately and
    plan key rotation and persistent ASP.NET Core Data Protection keys.
+5. Set `DataProtection__KeysPath` to a persistent directory writable by the Auth
+   process. The existing configuration sets application name `Bookstore.Auth`
+   and encrypts the key ring with the configured encryption certificate. Back up
+   that certificate and its password together with the key ring, and retain old
+   decryption material during a planned rotation. See the
+   [Production checklist](delivery-guide.md#production-checklist) for deployment
+   boundaries and reverse-proxy requirements.
 
 ```powershell
 dotnet tool restore
@@ -193,9 +210,10 @@ certificate preparation, discovery routing and production boundary.
 
 ## Verification
 
-Package restore and build passed with zero warnings/errors. All 97 unit-test
-cases passed, including client permissions, scope/claim rules, address validation,
-and safe Auth exception handling. EF reported no pending authentication model changes.
+At this OAuth checkpoint, package restore and build passed with zero warnings/errors.
+All 97 then-existing unit-test cases passed, including client permissions, scope/claim
+rules, address validation, and safe Auth exception handling. EF reported no pending
+authentication model changes.
 
 The local HTTPS server was exercised against SQL Server, with normal certificate
 validation in both an HTTP client and headless Microsoft Edge. Checks covered

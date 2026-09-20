@@ -5,9 +5,33 @@
 An ASP.NET Core bookstore API. The solution setup, Book/Author contracts and
 validation, unit tests, EF Core SQL Server persistence, book CRUD, paginated search,
 and a local OAuth authorization server with API scope enforcement and Swagger are implemented.
-Run the applications locally/with Visual Studio against containerized SQL Server,
-or use the complete Docker Compose demonstration. GitHub Actions verifies the solution
-restore, Release build, and unit tests on pull requests and pushes to `main`.
+The recommended reviewer path is the complete Docker Compose demonstration. GitHub
+Actions verifies restore, Release build, and unit tests on pull requests and pushes to
+`main`.
+
+Start with the [delivery guide](docs/delivery-guide.md) for the architecture,
+clean Windows setup, presentation sequence, and Production checklist. The
+[final verification record](docs/final-verification.md) separates completed checks
+from the Docker clean-laptop retest and optional Visual Studio checks still to be performed.
+
+## Docker quick start (recommended)
+
+Requires only Git, Docker Desktop running Linux containers, and Windows PowerShell.
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/Initialize-DockerDemo.ps1 -TrustHttpsCertificate
+docker compose --profile demo up -d --build --wait
+```
+
+- Swagger: `https://localhost:7100/swagger`
+- Auth: `https://localhost:7200/`
+- Health: `https://localhost:7100/health` and `https://localhost:7200/health`
+
+```powershell
+(Get-Content -LiteralPath '.local/docker/auth.json' -Raw | ConvertFrom-Json).'DevelopmentDemo:UserPassword' | Set-Clipboard
+```
+
+Open Swagger, obtain the management token with the [Docker token command](docs/api-security-swagger.md#management-token-and-crud), authorize **ManagementToken**, and try a CRUD operation. Then authorize **SearchOAuth**, sign in as `demo@bookstore.local` using the clipboard password, and try search.
 
 ## Solution
 
@@ -19,7 +43,12 @@ Open `Bookstore.slnx`, the solution containing all three .NET 10 projects:
 | `src/Bookstore.Auth` | OpenIddict issuer, minimal Identity login/logout, separate authentication database, and a Development browser flow check. |
 | `tests/Bookstore.UnitTests` | xUnit tests for validation, pagination, JSON contracts, author rules, OAuth client/claim rules, API token/scope validation, errors, and safe logging. |
 
-## Prerequisites and Visual Studio
+## Optional local / Visual Studio development
+
+This path is not required for the Docker quick start. It requires local .NET tooling,
+Visual Studio (if used), and User Secrets.
+
+### Prerequisites and Visual Studio
 
 - Install the stable .NET SDK `10.0.400`. `global.json` allows newer stable
   `10.0.4xx` patches and disallows previews.
@@ -42,15 +71,15 @@ version requirement. The earlier inspection omitted prerelease installations.
 The SDK remains stable even when using the Insiders IDE. Opening, building, and
 debugging in that IDE have not yet been verified.
 
-## Build, test, and run
+### Build, test, and run locally
 
 From the repository root in PowerShell:
 
 ```powershell
 dotnet --version
 dotnet restore Bookstore.slnx
-dotnet build Bookstore.slnx --no-restore
-dotnet test tests/Bookstore.UnitTests/Bookstore.UnitTests.csproj --no-build --no-restore
+dotnet build Bookstore.slnx --configuration Release --no-restore
+dotnet test tests/Bookstore.UnitTests/Bookstore.UnitTests.csproj --configuration Release --no-build --no-restore
 ```
 
 The first command should report `10.0.400` or a newer stable `10.0.4xx` patch.
@@ -59,31 +88,16 @@ run these unit tests. The validation tests call MVC's object validator directly,
 including its validation of nested authors. JSON tests use the web serializer
 defaults. No HTTP server, database, or integration-test packages are involved.
 
-## Continuous integration
-
-The **Build and tests** GitHub Actions workflow runs for pull requests targeting
-`main` and pushes to `main`. It uses the SDK selected by `global.json`, then runs:
-
-```powershell
-dotnet restore Bookstore.slnx
-dotnet build Bookstore.slnx --configuration Release --no-restore
-dotnet test tests/Bookstore.UnitTests/Bookstore.UnitTests.csproj --configuration Release --no-build --no-restore
-```
-
-It runs only the existing unit-test project, so it does not require SQL Server,
-User Secrets, `.env`, authentication credentials, generated certificates, or Docker.
-The first hosted workflow result will be available after this branch is pushed and
-the pull request or `main` push triggers the workflow.
-
-Verified locally for this CI step with SDK `10.0.400`: package restore passed,
-build passed with zero warnings/errors, and all 140 unit-test cases passed.
+Verified locally for the final review with SDK `10.0.400`: package restore passed,
+Release build passed with zero warnings/errors, all 140 unit-test cases passed,
+and `dotnet format Bookstore.slnx --verify-no-changes --no-restore` passed.
 See the [API security/Swagger guide](docs/api-security-swagger.md) and
 [OAuth server guide](docs/oauth-server.md#verification) for live checks.
 Database checks are recorded below; the unit tests themselves use no database.
 
-Complete the database setup below before starting the API and the
-[Auth setup](docs/oauth-server.md#windows-and-visual-studio-setup) before starting
-Auth. Use separate terminals:
+Complete the optional local database setup below before starting the API and the
+[optional Auth setup](docs/oauth-server.md#optional-local--visual-studio-development)
+before starting Auth. Use separate terminals:
 
 ```powershell
 dotnet run --project src/Bookstore.Auth --launch-profile https
@@ -102,19 +116,30 @@ Trust the local development certificate with `dotnet dev-certs https --trust`.
 Both applications require HTTPS and reject plaintext HTTP instead of redirecting
 requests containing credentials. Visual Studio UI startup remains unverified.
 
-For the full container run mode, see the [Docker demonstration guide](docs/docker-demo.md).
-After the existing user-secrets setup and certificate trust, the Windows helper
-prepares ignored runtime files:
+### Docker run mode
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/Initialize-DockerDemo.ps1
-docker compose --profile demo up -d --build --wait
-```
-
-Stop local API/Auth processes first. Docker uses the same HTTPS URLs and databases.
-The `demo` profile leaves the SQL-only Visual Studio workflow available. Images
+Use the [Docker quick start](#docker-quick-start-recommended) instead of this
+optional local path. Stop local API/Auth processes before Docker starts because the
+same HTTPS ports are used. The full [Docker demonstration guide](docs/docker-demo.md)
+covers storage, certificate handling, switching modes, and troubleshooting. Images
 contain no private certificates or populated local settings, and both applications
 run as non-root users. `/health` is anonymous and checks database connectivity.
+
+## Continuous integration
+
+The [Build and tests workflow](.github/workflows/build-and-tests.yml) runs for pull
+requests targeting `main` and pushes to `main`. It installs the SDK selected by
+`global.json` and runs the same restore, Release build, and unit-test commands
+listed above, on `ubuntu-latest` with read-only repository permissions.
+
+It needs no SQL Server, User Secrets, `.env`, authentication credentials, generated
+certificates, or Docker. The developer confirmed that both the CI pull-request run
+and post-merge `main` run passed, with a green README badge. The badge and link use
+the exact workflow path `.github/workflows/build-and-tests.yml`.
+
+CI covers the existing unit tests. SQL Server, actual OAuth issuance, browsers,
+and a clean Windows setup require the separate checks in the
+[verification record](docs/final-verification.md).
 
 ## Book CRUD
 
@@ -144,11 +169,12 @@ DbContext directly, with async database operations and request cancellation
 tokens. `AuthorRules` holds the rule shared by creation and replacement so it can
 be tested without a database. A new author and its book are saved in one EF
 transaction. DTO responses prevent database navigation properties from leaking
-into JSON or producing reference cycles. The schema is unchanged in this step.
+into JSON or producing reference cycles.
 
 ### Try the endpoints from PowerShell
 
-Complete the [local database setup](#local-setup), start Auth and the API, and obtain
+Complete the [Docker quick start](#docker-quick-start-recommended) or the
+[optional local database setup](#optional-local-database-setup), then obtain
 `$managementHeaders` using the [management-token example](docs/api-security-swagger.md#management-token-and-crud).
 Then run in the same PowerShell terminal:
 
@@ -286,9 +312,10 @@ different scope for CRUD and search.
 | `bookstore-browser` (public, without a secret) | Implicit | `books.search` |
 
 The two clients are applications, not two users. The single Development user is
-`demo@bookstore.local`; its password and the management secret are generated into
-Auth user secrets by `scripts/Initialize-AuthDevelopment.ps1`. Existing settings,
-passwords, and client registrations are preserved on repeated setup/startup.
+`demo@bookstore.local`. The Docker initializer generates its password and the
+management secret in ignored `.local/docker/auth.json`; optional local development
+uses Auth User Secrets through `scripts/Initialize-AuthDevelopment.ps1`. Existing
+settings, passwords, and client registrations are preserved on repeated startup.
 No credentials or demonstration rows are included in migrations or tracked
 configuration. Production does not migrate or seed automatically and requires
 explicit signing/encryption credentials.
@@ -301,18 +328,18 @@ validation, the Swagger callback, management-token setup, and 401/403 behavior.
 
 ## SQL Server persistence
 
-### Local setup
+### Optional local database setup
 
 Use Docker Desktop with Linux containers. Compose runs SQL Server 2022 Developer
 on `127.0.0.1,14333` by default, bound only to the local machine. The API connects
 to the `Bookstore` database. Auth uses the separate `BookstoreAuth` database on
 the same server and persistent volume; see its setup guide above.
 
-1. Copy the placeholder file once: `Copy-Item .env.example .env`. If `.env`
-   already exists, preserve it. Set `MSSQL_SA_PASSWORD` to a strong local password
-   (at least 8 characters, including upper/lowercase letters, digits, and a symbol).
-   Single-quote the value in `.env` if it contains `$` or `#`, so Compose treats
-   those characters literally. `.env` is ignored; only `.env.example` is tracked.
+1. The Docker quick start creates `.env` automatically. For this optional local path,
+   copy the placeholder once with `Copy-Item .env.example .env` only when `.env` is
+   absent. If it already exists, preserve it. Set `MSSQL_SA_PASSWORD` to a strong
+   local password (at least 8 characters, including upper/lowercase letters, digits,
+   and a symbol). `.env` is ignored; only `.env.example` is tracked.
 2. Run `docker compose up -d --wait sqlserver`, then `docker compose ps`.
    The health check makes a real SQL connection and executes `SELECT 1`.
 3. In Visual Studio, right-click **Bookstore.Api > Manage User Secrets** and add
@@ -498,7 +525,7 @@ Our choices are stable .NET 10, ASP.NET Core controllers, the three-project
 solution above, EF Core with SQL Server Developer in Docker, and a local
 OpenIddict server with minimal ASP.NET Core Identity. The PDF does not prescribe
 those versions, libraries, or project boundaries. xUnit tests, setup documentation,
-and the later CI workflow are our agreed delivery practices.
+and the CI workflow are our agreed delivery practices.
 
 The following contract details are agreed assumptions beyond the PDF's model and
 flow requirements. Contracts, validation, persistence, book CRUD, and search are
@@ -529,7 +556,8 @@ Token lifetime, audience, client IDs, implicit consent, and the development
 callback are our implementation choices, not extra assignment requirements.
 The required implicit flow is implemented explicitly; Authorization Code with
 PKCE is a production recommendation. API enforcement, Swagger, Docker
-demonstration, and CI are implemented; final delivery checks remain.
+demonstration, and CI are implemented. Local final verification is recorded;
+Visual Studio UI and another Windows laptop still need manual verification.
 
 ### Current implementation
 
@@ -595,11 +623,10 @@ the response is:
 }
 ```
 
-These examples will also be included in OpenAPI when the demonstration client is
-added. Unit tests cover input/author rules and exception response behavior; the
-SQL Server, live HTTP, and browser checks are separate manual verification. OAuth
-issuance is implemented and verified; API token validation and scope enforcement
-are the next step.
+These examples are included in OpenAPI. Unit tests cover input/author rules,
+token and scope validation, and exception response behavior. SQL Server, live
+HTTP, both real OAuth flows, and browser checks are recorded separately in the
+[final verification record](docs/final-verification.md).
 
 ## Local files
 

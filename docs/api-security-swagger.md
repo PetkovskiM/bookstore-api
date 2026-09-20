@@ -4,11 +4,17 @@ The API accepts signed access tokens from `Bookstore.Auth`. CRUD requires
 `books.manage`; `GET /api/books/search` requires `books.search`. These policies
 apply to the server endpoints, including requests made outside Swagger.
 
-## Start the local demonstration
+## Docker demonstration (recommended)
 
-Complete the [database setup](../README.md#local-setup) and
-[Auth user-secrets setup](oauth-server.md#windows-and-visual-studio-setup) first.
-Preserve existing `.env` and user-secrets values. From the repository root:
+Use the [Docker quick start](../README.md#docker-quick-start-recommended). It needs
+no host SDK, Visual Studio, User Secrets, or `dotnet dev-certs`. When all three
+containers are healthy, open `https://localhost:7100/swagger`.
+
+## Optional local / Visual Studio demonstration
+
+Complete the [optional local database setup](../README.md#optional-local-database-setup)
+and [optional Auth User Secrets setup](oauth-server.md#optional-local--visual-studio-development)
+first. Preserve existing `.env` and User Secrets values. From the repository root:
 
 ```powershell
 docker compose up -d --wait sqlserver
@@ -40,12 +46,12 @@ implicit login uses a browser redirect to Auth.
 
 ## Management token and CRUD
 
-Use PowerShell to obtain a token. The management client secret stays in local
-user secrets and never goes into Swagger configuration or browser requests:
+For Docker, use PowerShell to obtain a token. The management client secret stays in
+the ignored Docker runtime file and never goes into Swagger configuration or browser
+requests:
 
 ```powershell
-$secretPath = Join-Path $env:APPDATA 'Microsoft\UserSecrets\bookstore-auth-development\secrets.json'
-$authSettings = Get-Content -LiteralPath $secretPath -Raw | ConvertFrom-Json
+$authSettings = Get-Content -LiteralPath '.local/docker/auth.json' -Raw | ConvertFrom-Json
 $managementToken = Invoke-RestMethod -Method Post -Uri 'https://localhost:7200/connect/token' -Body @{
     grant_type = 'client_credentials'
     client_id = 'bookstore-management'
@@ -55,6 +61,12 @@ $managementToken = Invoke-RestMethod -Method Post -Uri 'https://localhost:7200/c
 $managementHeaders = @{ Authorization = 'Bearer ' + $managementToken.access_token }
 # Confirm non-sensitive response fields without printing the token:
 $managementToken | Select-Object token_type, expires_in, scope
+```
+
+For optional local/Visual Studio hosting only, replace the first line with:
+
+```powershell
+$authSettings = Get-Content -LiteralPath (Join-Path $env:APPDATA 'Microsoft\UserSecrets\bookstore-auth-development\secrets.json') -Raw | ConvertFrom-Json
 ```
 
 Use `$managementHeaders` with the [PowerShell CRUD walkthrough](../README.md#try-the-endpoints-from-powershell).
@@ -78,8 +90,11 @@ Deleting a book intentionally retains its author.
 1. Open Swagger's **Authorize** dialog and find **SearchOAuth**. The client ID is
    `bookstore-browser`, with `books.search` selected. There is no client secret.
 2. Click its **Authorize** button. Allow the local login popup if your browser
-   blocks it. Sign in as `demo@bookstore.local` with the password in **Bookstore.Auth
-   > Manage User Secrets**, under `DevelopmentDemo:UserPassword`.
+   blocks it. Sign in as `demo@bookstore.local`. For Docker, deliberately copy the
+   generated password with `(Get-Content -LiteralPath '.local/docker/auth.json' -Raw |
+   ConvertFrom-Json).'DevelopmentDemo:UserPassword' | Set-Clipboard`; for optional
+   local development, use **Bookstore.Auth > Manage User Secrets** under
+   `DevelopmentDemo:UserPassword`.
 3. The popup returns to exactly
    `https://localhost:7100/swagger/oauth2-redirect.html` and closes. Close the dialog
    and execute `GET /api/books/search` using **Try it out**.
@@ -152,12 +167,15 @@ database on every request; immediate token revocation is not implemented.
 Both local applications with containerized SQL Server and the
 [full Docker demonstration](docker-demo.md) use these URLs and OAuth clients.
 The Docker guide covers certificate mounts, discovery routing, health and storage.
-Obtain fresh tokens after switching between run modes. CI and integration tests
-remain separate checkpoints.
+Obtain fresh tokens after switching between run modes. The
+[CI workflow](../README.md#continuous-integration) runs unit tests; it does not
+issue real OAuth tokens. See the [final verification record](final-verification.md)
+and [presentation sequence](delivery-guide.md#presentation-sequence) for current
+results and the reviewer walkthrough. No integration-test project is required.
 
 ## Verification
 
-Restore and build passed without warnings/errors; all 131 unit-test cases passed.
+Restore and build passed without warnings/errors; all 140 unit-test cases passed.
 The added tests cover exact scope enforcement on every book action and token
 rejection for wrong issuer, audience, signature, lifetime, type and algorithm,
 missing expiry, and unsigned tokens. These unit-generated tokens check validation
